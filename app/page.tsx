@@ -21,7 +21,7 @@ export default function LandingPage() {
             <a href="#changelog">Changelog</a>
           </div>
           <div className="nav-right">
-            <a className="signin" href="#">Sign in</a>
+            <Link className="signin" href="/signin">Sign in</Link>
             <a className="cta" href="#cta">Get early access <span className="arr">→</span></a>
           </div>
         </div>
