@@ -1,0 +1,425 @@
+/* Install — scoped under .install-root */
+
+.install-root {
+  --code-bg:      #0f0f0d;
+  --code-fg:      #f5f3ec;
+  --code-mute:    #8e8d83;
+  --code-key:     #b8d1bb;
+  --code-str:     #d8c9a6;
+  --code-cmt:     #6b6a5f;
+  min-height: 100vh;
+  background: var(--bg);
+  font-family: 'Geist', -apple-system, system-ui, sans-serif;
+}
+
+.install-root .nav {
+  position: sticky; top: 0; z-index: 40;
+  background: rgba(255,255,255,0.9);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  backdrop-filter: blur(20px) saturate(160%);
+  border-bottom: 1px solid var(--rule);
+}
+.install-root .nav-inner {
+  max-width: 1200px; margin: 0 auto;
+  padding: 0 28px; height: 64px;
+  display: flex; align-items: center; gap: 28px;
+}
+.install-root .brand { display: flex; align-items: center; gap: 10px; }
+.install-root .brand .logo {
+  width: 22px; height: 22px; border-radius: 5px;
+  background: var(--ink); position: relative;
+}
+.install-root .brand .logo::before, .install-root .brand .logo::after { content: ""; position: absolute; background: var(--bg); }
+.install-root .brand .logo::before { top: 5px; left: 5px; width: 12px; height: 1.5px; }
+.install-root .brand .logo::after  { top: 5px; left: 5px; width: 1.5px; height: 12px; }
+.install-root .brand .name { font-weight: 600; letter-spacing: -0.01em; font-size: 15px; }
+.install-root .brand .name .sm { font-weight: 400; color: var(--muted); margin-left: 4px; }
+
+.install-root .nav-crumb { display: flex; align-items: center; gap: 6px; font-size: 13.5px; color: var(--muted); }
+.install-root .nav-crumb .cur { color: var(--ink); font-weight: 500; }
+.install-root .nav-crumb .sep { color: var(--faint); }
+.install-root .nav-right { margin-left: auto; display: flex; align-items: center; gap: 6px; font-size: 13px; }
+.install-root .nav-right .ver {
+  font-family: 'Geist Mono', monospace;
+  font-size: 11px; color: var(--muted);
+  padding: 4px 8px; border-radius: 4px;
+  background: var(--bg-sunken);
+}
+.install-root .nav-right a.txt { padding: 6px 10px; border-radius: 6px; color: var(--ink-soft); }
+.install-root .nav-right a.txt:hover { background: var(--bg-sunken); color: var(--ink); }
+
+.install-root .hero {
+  max-width: 1080px; margin: 0 auto;
+  padding: 72px 28px 32px;
+}
+.install-root .eyebrow {
+  font-family: 'Geist Mono', monospace;
+  font-size: 11.5px;
+  text-transform: uppercase; letter-spacing: 0.12em;
+  color: var(--muted);
+  margin-bottom: 18px;
+}
+.install-root .hero h1 {
+  font-size: clamp(38px, 5vw, 60px);
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  line-height: 1.05;
+  margin: 0 0 18px;
+}
+.install-root .hero h1 .muted { color: var(--muted); font-weight: 400; }
+.install-root .hero .lede { font-size: 17px; color: var(--ink-soft); max-width: 680px; margin: 0; }
+.install-root .hero .lede b { color: var(--ink); font-weight: 500; }
+.install-root .hero-stat-row {
+  margin-top: 32px;
+  display: flex; gap: 28px; flex-wrap: wrap;
+  font-family: 'Geist Mono', monospace;
+  font-size: 12px; color: var(--muted);
+}
+.install-root .hero-stat-row .item b { color: var(--ink-soft); font-weight: 500; }
+
+.install-root .section { max-width: 1080px; margin: 0 auto; padding: 24px 28px; }
+.install-root .section h2 {
+  font-size: 13px;
+  text-transform: uppercase; letter-spacing: 0.1em;
+  color: var(--muted);
+  font-weight: 600;
+  font-family: 'Geist Mono', monospace;
+  margin: 0 0 16px;
+  display: flex; align-items: baseline; gap: 10px;
+}
+.install-root .section h2 .count { font-family: inherit; font-weight: 500; color: var(--ink-soft); }
+.install-root .section h2 .opt {
+  margin-left: auto;
+  font-family: 'Geist Mono', monospace;
+  font-size: 11px; color: var(--muted);
+  text-transform: none; letter-spacing: 0.02em;
+}
+.install-root .section h2 .opt a { color: var(--ink); border-bottom: 1px solid var(--rule-strong); padding-bottom: 1px; }
+
+.install-root .client-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 10px;
+}
+@media (max-width: 980px) { .install-root .client-grid { grid-template-columns: repeat(3, 1fr); } }
+@media (max-width: 640px) { .install-root .client-grid { grid-template-columns: repeat(2, 1fr); } }
+
+.install-root .client {
+  appearance: none; border: 1px solid var(--rule);
+  background: var(--bg);
+  padding: 18px 16px 16px;
+  border-radius: 12px;
+  text-align: left;
+  display: flex; flex-direction: column; gap: 12px;
+  cursor: default;
+  position: relative;
+  transition: all 140ms;
+  font: inherit; font-family: inherit;
+  min-height: 120px;
+}
+.install-root .client:hover { border-color: var(--rule-strong); background: var(--bg-soft); transform: translateY(-1px); }
+.install-root .client[data-on="1"] {
+  border-color: var(--ink);
+  background: var(--bg);
+  box-shadow: 0 0 0 1px var(--ink);
+}
+.install-root .client[data-on="1"]::after {
+  content: ""; position: absolute;
+  top: 12px; right: 12px;
+  width: 16px; height: 16px;
+  border-radius: 50%;
+  background: var(--ink);
+}
+.install-root .client[data-on="1"]::before {
+  content: ""; position: absolute;
+  top: 18px; right: 16px;
+  width: 7px; height: 4px;
+  border-left: 1.5px solid var(--bg);
+  border-bottom: 1.5px solid var(--bg);
+  transform: rotate(-45deg);
+  z-index: 1;
+}
+.install-root .client .glyph {
+  width: 36px; height: 36px;
+  border-radius: 8px;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--bg-sunken);
+  font-family: 'Geist Mono', monospace;
+  font-weight: 600;
+  font-size: 13px;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+  flex-shrink: 0;
+}
+.install-root .client .name { font-size: 14px; font-weight: 600; letter-spacing: -0.01em; color: var(--ink); }
+.install-root .client .meta {
+  font-family: 'Geist Mono', monospace;
+  font-size: 10.5px; color: var(--muted);
+  text-transform: uppercase; letter-spacing: 0.06em;
+}
+.install-root .client .stat {
+  position: absolute;
+  bottom: 12px; right: 14px;
+  font-family: 'Geist Mono', monospace;
+  font-size: 9.5px; color: var(--muted);
+  text-transform: uppercase; letter-spacing: 0.06em;
+}
+.install-root .client .stat.beta { color: oklch(0.55 0.1 60); }
+
+.install-root .steps-wrap { max-width: 1080px; margin: 0 auto; padding: 8px 28px 40px; }
+
+.install-root .step {
+  display: grid;
+  grid-template-columns: 48px 1fr;
+  gap: 18px;
+  padding: 28px 0;
+  border-top: 1px solid var(--rule);
+}
+.install-root .step:first-of-type { border-top: 0; }
+.install-root .step .num {
+  width: 30px; height: 30px;
+  border-radius: 50%;
+  border: 1.4px solid var(--ink);
+  background: var(--bg);
+  display: inline-flex; align-items: center; justify-content: center;
+  font-family: 'Geist Mono', monospace;
+  font-size: 12px; font-weight: 600;
+  color: var(--ink);
+  flex-shrink: 0;
+}
+.install-root .step .body { min-width: 0; }
+.install-root .step h3 {
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  line-height: 1.2;
+  margin: 0 0 6px;
+}
+.install-root .step h3 .platform-only {
+  font-family: 'Geist Mono', monospace;
+  font-size: 11px; color: var(--muted);
+  font-weight: 400; letter-spacing: 0;
+  margin-left: 8px;
+  padding: 2px 7px;
+  background: var(--bg-sunken);
+  border-radius: 4px;
+  vertical-align: 4px;
+}
+.install-root .step .lede { font-size: 14.5px; color: var(--ink-soft); margin: 0 0 16px; max-width: 720px; }
+.install-root .step .note {
+  margin-top: 14px;
+  padding: 12px 14px;
+  background: var(--bg-soft);
+  border-left: 2px solid var(--rule-strong);
+  font-size: 13px;
+  color: var(--ink-soft);
+  border-radius: 0 6px 6px 0;
+}
+.install-root .step .note b { color: var(--ink); font-weight: 500; }
+
+.install-root .code {
+  background: var(--code-bg);
+  color: var(--code-fg);
+  border-radius: 10px;
+  margin: 14px 0;
+  position: relative;
+  overflow: hidden;
+}
+.install-root .code .code-hd {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 14px;
+  border-bottom: 1px solid rgba(255,255,255,0.07);
+  background: rgba(255,255,255,0.025);
+  font-family: 'Geist Mono', monospace;
+  font-size: 11px;
+  color: var(--code-mute);
+}
+.install-root .code .code-hd .path { color: var(--code-fg); font-weight: 500; }
+.install-root .code .code-hd .copy {
+  margin-left: auto;
+  appearance: none; border: 0;
+  background: transparent;
+  color: var(--code-mute);
+  font: inherit; font-family: 'Geist Mono', monospace;
+  font-size: 11px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  cursor: default;
+  display: inline-flex; align-items: center; gap: 5px;
+  transition: all 120ms;
+}
+.install-root .code .code-hd .copy:hover { background: rgba(255,255,255,0.06); color: var(--code-fg); }
+.install-root .code .code-hd .copy.ok { color: var(--code-key); }
+.install-root .code pre {
+  margin: 0;
+  padding: 14px 16px 16px;
+  font-family: 'Geist Mono', monospace;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--code-fg);
+  white-space: pre;
+  overflow-x: auto;
+}
+.install-root .code pre::-webkit-scrollbar { height: 6px; }
+.install-root .code pre::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 999px; }
+.install-root .code pre .k { color: var(--code-key); }
+.install-root .code pre .s { color: var(--code-str); }
+.install-root .code pre .c { color: var(--code-cmt); font-style: italic; }
+.install-root .code pre .p { color: var(--code-mute); }
+.install-root .code pre .v { color: #c4cdb9; }
+.install-root .code pre .n { color: #d8c9a6; }
+
+.install-root code.inline {
+  font-family: 'Geist Mono', monospace;
+  font-size: 0.92em;
+  background: var(--bg-sunken);
+  padding: 2px 5px;
+  border-radius: 3px;
+  color: var(--ink-soft);
+}
+
+.install-root .os-tabs {
+  display: inline-flex;
+  background: var(--bg-sunken);
+  padding: 3px;
+  border-radius: 7px;
+  margin: 6px 0 6px;
+}
+.install-root .os-tabs .ot {
+  appearance: none; border: 0;
+  background: transparent;
+  padding: 5px 12px;
+  font: inherit; font-family: inherit;
+  font-size: 12.5px;
+  color: var(--ink-soft);
+  font-weight: 500;
+  border-radius: 5px;
+  cursor: default;
+}
+.install-root .os-tabs .ot[data-on="1"] {
+  background: var(--bg);
+  box-shadow: 0 1px 2px rgba(0,0,0,0.05), 0 0 0 0.5px rgba(0,0,0,0.06);
+}
+.install-root .os-tabs .ot:not([data-on="1"]):hover { color: var(--ink); }
+
+.install-root .capabilities { max-width: 1080px; margin: 0 auto; padding: 0 28px 80px; }
+.install-root .capabilities h2 {
+  font-family: 'Geist Mono', monospace;
+  font-size: 13px;
+  text-transform: uppercase; letter-spacing: 0.1em;
+  color: var(--muted);
+  margin: 0 0 16px;
+}
+.install-root .capabilities .grid {
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+}
+@media (max-width: 880px) { .install-root .capabilities .grid { grid-template-columns: 1fr; } }
+.install-root .cap {
+  border: 1px solid var(--rule);
+  border-radius: 12px;
+  padding: 20px 22px;
+  background: var(--bg);
+}
+.install-root .cap .h {
+  font-family: 'Geist Mono', monospace;
+  font-size: 11px; color: var(--muted);
+  text-transform: uppercase; letter-spacing: 0.1em;
+  margin-bottom: 10px;
+}
+.install-root .cap h4 { font-size: 17px; font-weight: 600; letter-spacing: -0.01em; margin: 0 0 8px; }
+.install-root .cap p { font-size: 13.5px; color: var(--muted); margin: 0 0 12px; line-height: 1.55; }
+.install-root .cap .tools { display: flex; flex-wrap: wrap; gap: 5px; }
+.install-root .cap .tool {
+  font-family: 'Geist Mono', monospace;
+  font-size: 10.5px;
+  background: var(--bg-sunken);
+  color: var(--ink-soft);
+  padding: 2px 7px;
+  border-radius: 3px;
+}
+
+.install-root .verify {
+  margin: 22px 0 8px;
+  border: 1px solid var(--rule);
+  border-radius: 12px;
+  background: var(--bg-soft);
+  padding: 18px 20px;
+  display: flex; gap: 14px; align-items: center;
+}
+.install-root .verify .ic {
+  width: 38px; height: 38px;
+  border-radius: 50%;
+  border: 1.3px dashed var(--a-iris);
+  background: var(--bg);
+  display: inline-flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+  color: var(--a-iris);
+  font-weight: 600;
+  font-size: 13px;
+}
+.install-root .verify .body { flex: 1; }
+.install-root .verify .body .ttl { font-size: 14px; font-weight: 500; }
+.install-root .verify .body .sub { font-size: 12.5px; color: var(--muted); margin-top: 2px; }
+.install-root .verify .check {
+  font-family: 'Geist Mono', monospace;
+  font-size: 11px; color: oklch(0.55 0.1 150);
+  font-weight: 500;
+}
+.install-root .verify .check::before { content: "✓ "; font-weight: 700; }
+
+.install-root .tshoot { max-width: 1080px; margin: 0 auto; padding: 0 28px 64px; }
+.install-root .tshoot h2 {
+  font-family: 'Geist Mono', monospace;
+  font-size: 13px;
+  text-transform: uppercase; letter-spacing: 0.1em;
+  color: var(--muted);
+  margin: 0 0 4px;
+}
+.install-root .tshoot details { border-top: 1px solid var(--rule); padding: 16px 0; }
+.install-root .tshoot details:last-of-type { border-bottom: 1px solid var(--rule); }
+.install-root .tshoot summary {
+  cursor: default;
+  display: flex; align-items: center; gap: 12px;
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--ink);
+  list-style: none;
+}
+.install-root .tshoot summary::-webkit-details-marker { display: none; }
+.install-root .tshoot summary::before {
+  content: "+";
+  font-family: 'Geist Mono', monospace;
+  font-size: 14px;
+  color: var(--muted);
+  width: 16px;
+  text-align: center;
+  transition: transform 200ms;
+}
+.install-root .tshoot details[open] summary::before { content: "−"; }
+.install-root .tshoot .ds-body {
+  margin-top: 12px;
+  padding-left: 28px;
+  font-size: 14px;
+  color: var(--ink-soft);
+  line-height: 1.6;
+}
+
+.install-root .support {
+  max-width: 1080px; margin: 0 auto;
+  padding: 24px 28px 80px;
+  border-top: 1px solid var(--rule);
+}
+.install-root .support .row {
+  display: flex; align-items: center; gap: 20px; flex-wrap: wrap;
+  font-size: 13.5px;
+  color: var(--ink-soft);
+}
+.install-root .support .row a {
+  border-bottom: 1px solid var(--rule-strong);
+  padding-bottom: 1px;
+  color: var(--ink);
+  font-weight: 500;
+}
+.install-root .support .row a:hover { border-bottom-color: var(--ink); }
+.install-root .support .grow { flex: 1; }

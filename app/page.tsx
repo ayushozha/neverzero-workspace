@@ -18,6 +18,7 @@ export default function LandingPage() {
             <a href="#anywhere">Anywhere</a>
             <a href="#memory">Memory</a>
             <a href="#pricing">Pricing</a>
+            <Link href="/install">Install</Link>
             <a href="#changelog">Changelog</a>
           </div>
           <div className="nav-right">
