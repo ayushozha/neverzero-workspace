@@ -20,6 +20,7 @@ export interface RegisterAgentModalProps {
   open: boolean;
   client: string;
   defaultName: string;
+  orgSlug: string;
   onClose: () => void;
   onRegistered: (agent: RegisteredAgent, apiKey: string) => void;
 }
@@ -28,6 +29,7 @@ export default function RegisterAgentModal({
   open,
   client,
   defaultName,
+  orgSlug,
   onClose,
   onRegistered,
 }: RegisterAgentModalProps) {
@@ -70,6 +72,7 @@ export default function RegisterAgentModal({
         body: JSON.stringify({
           name: name.trim(),
           from: client,
+          org: orgSlug,
           platform: { os: os || null, machine: machine.trim() || null },
         }),
       });

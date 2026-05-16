@@ -31,6 +31,7 @@ export interface Agent {
   name: string;               // agent-name (user chosen, e.g. "Codex on Sam's MacBook")
   from: ClientId;             // agent-from (which platform/client it lives in)
   ownedBy: string;            // agent-ownedby (workspace owner id)
+  orgSlug: string;            // organization that owns this agent (e.g. "atlas")
 
   // Auth
   apiKeyPrefix: string;       // safe display, e.g. "nz_live_x9K2"
@@ -102,9 +103,12 @@ function newApiKey(): { key: string; prefix: string; hash: string } {
 
 // ───────── Public API ─────────
 
-export async function listAgents(): Promise<Agent[]> {
+export async function listAgents(opts?: { orgSlug?: string }): Promise<Agent[]> {
   const s = await readStore();
-  return s.agents.slice().sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+  const filtered = opts?.orgSlug
+    ? s.agents.filter((a) => a.orgSlug === opts.orgSlug)
+    : s.agents;
+  return filtered.slice().sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
 }
 
 export async function getAgent(id: string): Promise<Agent | undefined> {
@@ -115,8 +119,9 @@ export async function getAgent(id: string): Promise<Agent | undefined> {
 export interface CreateAgentInput {
   name: string;
   from: ClientId;
+  orgSlug: string;       // required — every agent must belong to an org
   ownedBy?: string;      // defaults to 'sam' (single-user demo)
-  workspace?: string;    // defaults to 'acme'
+  workspace?: string;    // defaults to org slug
   scopes?: AgentScope[]; // defaults to ['read', 'write']
   platform?: Agent['platform'];
   metadata?: Record<string, string>;
@@ -127,16 +132,20 @@ export async function createAgent(input: CreateAgentInput): Promise<AgentCreated
   if (!trimmedName) throw new Error('Agent name is required.');
   if (trimmedName.length > 80) throw new Error('Agent name must be ≤ 80 characters.');
 
+  const orgSlug = (input.orgSlug || '').toLowerCase().trim();
+  if (!orgSlug) throw new Error('orgSlug is required.');
+
   const { key, prefix, hash } = newApiKey();
   const agent: Agent = {
     id: shortId('agt'),
     name: trimmedName,
     from: input.from,
     ownedBy: input.ownedBy ?? 'sam',
+    orgSlug,
     apiKeyPrefix: prefix,
     apiKeyHash: hash,
     scopes: input.scopes ?? ['read', 'write'],
-    workspace: input.workspace ?? 'acme',
+    workspace: input.workspace ?? orgSlug,
     status: 'pending',
     createdAt: new Date().toISOString(),
     lastSeenAt: null,

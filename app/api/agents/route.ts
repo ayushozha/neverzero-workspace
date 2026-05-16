@@ -32,10 +32,18 @@ export async function POST(req: Request) {
     );
   }
 
+  const orgSlug = typeof body.org === 'string' ? body.org
+    : typeof body.orgSlug === 'string' ? body.orgSlug
+    : '';
+  if (!orgSlug.trim()) {
+    return NextResponse.json({ error: 'Field "org" (slug) is required.' }, { status: 400 });
+  }
+
   try {
     const result = await createAgent({
       name,
       from,
+      orgSlug: orgSlug.trim().toLowerCase(),
       ownedBy: typeof body.ownedBy === 'string' ? body.ownedBy : undefined,
       workspace: typeof body.workspace === 'string' ? body.workspace : undefined,
       platform: typeof body.platform === 'object' && body.platform !== null

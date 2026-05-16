@@ -159,11 +159,42 @@ export default function CreateBrainPage() {
       return next;
     });
 
-  const doCreate = () => {
-    if (!ready) return;
-    // After workspace creation: route through /install with the onboarding banner
-    // so the user can connect their first agent before landing in the workstation.
-    router.push('/install?from=brain');
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+
+  const doCreate = async () => {
+    if (!ready || submitting) return;
+    setSubmitting(true);
+    setSubmitError(null);
+    try {
+      const agentRoster = Array.from(selected).map((id) => (id === 'atlas' ? 'atlas-agent' : id));
+      const res = await fetch('/api/orgs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name,
+          tagline,
+          mission,
+          industry,
+          stage,
+          founded,
+          hq,
+          people: people.filter((p) => p.name.trim() || p.role.trim()),
+          memories: memories.filter((m) => m.text.trim()),
+          agentRoster,
+        }),
+      });
+      const data = (await res.json()) as { org?: { slug: string }; error?: string };
+      if (!res.ok || !data.org) {
+        setSubmitError(data.error || 'Failed to create organization');
+        setSubmitting(false);
+        return;
+      }
+      router.push(`/${data.org.slug}/install?from=brain`);
+    } catch (err) {
+      setSubmitError(err instanceof Error ? err.message : 'Network error');
+      setSubmitting(false);
+    }
   };
   const skip = () => router.push('/workstation');
 
@@ -186,8 +217,8 @@ export default function CreateBrainPage() {
             <div className="bar"><i style={{ width: progressPct + '%' }} /></div>
           </div>
           <button className="btn" onClick={skip} type="button">Skip for now</button>
-          <button className="btn primary" disabled={!ready} onClick={doCreate} type="button">
-            Create brain <span className="arr">→</span>
+          <button className="btn primary" disabled={!ready || submitting} onClick={doCreate} type="button">
+            {submitting ? 'Creating…' : 'Create brain'} <span className="arr">→</span>
           </button>
         </div>
       </div>
@@ -389,10 +420,20 @@ export default function CreateBrainPage() {
               <b>Ready when you are.</b> The brain stays editable — you can keep adding facts,
               rules, and people any time. Agents pick up changes instantly.
             </div>
-            <button className="big-btn" disabled={!ready} onClick={doCreate} type="button">
-              Create brain <span className="arr">→</span>
+            <button className="big-btn" disabled={!ready || submitting} onClick={doCreate} type="button">
+              {submitting ? 'Creating…' : 'Create brain'} <span className="arr">→</span>
             </button>
           </div>
+          {submitError && (
+            <div style={{
+              marginTop: 12,
+              padding: '10px 14px',
+              background: 'oklch(0.95 0.05 25)',
+              color: 'oklch(0.4 0.15 25)',
+              borderRadius: 8,
+              fontSize: 13,
+            }}>{submitError}</div>
+          )}
         </div>
 
         {/* Right: live preview */}
