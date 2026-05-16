@@ -405,6 +405,237 @@
   line-height: 1.6;
 }
 
+/* ───────── Register banner (top of steps) ───────── */
+.install-root .reg-banner {
+  max-width: 1080px;
+  margin: 0 auto 8px;
+  padding: 14px 16px;
+  display: flex; align-items: center; gap: 16px;
+  background: var(--bg-soft);
+  border: 1px solid var(--rule);
+  border-radius: 12px;
+}
+.install-root .reg-banner.ok {
+  background: var(--bg);
+  border: 1px solid var(--ink);
+  box-shadow: 0 0 0 1px var(--ink), 0 10px 24px -16px rgba(0,0,0,0.18);
+}
+.install-root .reg-body { flex: 1; min-width: 0; }
+.install-root .reg-eyebrow {
+  font-family: 'Geist Mono', monospace;
+  font-size: 10.5px;
+  text-transform: uppercase; letter-spacing: 0.1em;
+  color: var(--muted);
+}
+.install-root .reg-eyebrow.ok { color: oklch(0.55 0.1 150); }
+.install-root .reg-text { font-size: 13.5px; color: var(--ink-soft); margin-top: 4px; }
+.install-root .reg-text b { color: var(--ink); font-weight: 500; }
+.install-root .reg-text .reg-key {
+  font-family: 'Geist Mono', monospace;
+  font-size: 12px;
+  background: var(--bg-sunken);
+  padding: 2px 6px;
+  border-radius: 4px;
+  color: var(--ink);
+  user-select: all;
+  word-break: break-all;
+  display: inline-block;
+  max-width: 100%;
+}
+.install-root .reg-hint { font-size: 11.5px; color: var(--muted); margin-top: 6px; }
+.install-root .reg-hint code {
+  font-family: 'Geist Mono', monospace;
+  background: var(--bg-sunken);
+  padding: 1px 5px; border-radius: 3px;
+  color: var(--ink-soft);
+}
+.install-root .reg-link {
+  color: var(--ink);
+  border-bottom: 1px solid var(--rule-strong);
+  padding-bottom: 1px;
+}
+.install-root .reg-actions { display: flex; gap: 8px; flex-shrink: 0; }
+.install-root .reg-cta, .install-root .reg-secondary {
+  appearance: none; border: 0;
+  height: 38px; padding: 0 14px;
+  border-radius: 8px;
+  font: inherit; font-family: inherit;
+  font-weight: 500; font-size: 13.5px;
+  cursor: default;
+  transition: all 160ms;
+}
+.install-root .reg-cta {
+  background: var(--ink); color: var(--bg);
+}
+.install-root .reg-cta:hover { background: #1f1f1c; }
+.install-root .reg-secondary {
+  background: var(--bg);
+  border: 1px solid var(--rule-strong);
+  color: var(--ink-soft);
+}
+.install-root .reg-secondary:hover { background: var(--bg-soft); color: var(--ink); }
+
+/* Onboarding banner when arriving from /create-brain */
+.install-root .onboard-banner {
+  max-width: 1080px;
+  margin: 0 auto 0;
+  padding: 14px 18px;
+  background: var(--ink);
+  color: var(--bg);
+  border-radius: 12px;
+  display: flex; align-items: center; gap: 14px;
+}
+.install-root .onboard-banner .num {
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  background: var(--bg);
+  color: var(--ink);
+  display: inline-flex; align-items: center; justify-content: center;
+  font-family: 'Geist Mono', monospace;
+  font-size: 12px; font-weight: 600;
+  flex-shrink: 0;
+}
+.install-root .onboard-banner .txt { font-size: 14px; flex: 1; }
+.install-root .onboard-banner .txt b { font-weight: 500; }
+.install-root .onboard-banner .skip {
+  font-family: 'Geist Mono', monospace;
+  font-size: 11px;
+  color: rgba(255,255,255,0.6);
+  border-bottom: 1px solid rgba(255,255,255,0.25);
+  padding-bottom: 1px;
+}
+.install-root .onboard-banner .skip:hover { color: var(--bg); border-bottom-color: var(--bg); }
+
+/* ───────── Register modal ───────── */
+.install-root .ram-backdrop {
+  position: fixed; inset: 0;
+  background: rgba(10,10,9,0.42);
+  -webkit-backdrop-filter: blur(3px);
+  backdrop-filter: blur(3px);
+  z-index: 60;
+  animation: ram-fade 160ms ease;
+}
+.install-root .ram-modal {
+  position: fixed;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 61;
+  width: min(520px, calc(100vw - 32px));
+  background: var(--bg);
+  border: 1px solid var(--rule);
+  border-radius: 14px;
+  box-shadow: 0 30px 60px -10px rgba(0,0,0,0.35);
+  overflow: hidden;
+  animation: ram-pop 220ms cubic-bezier(.3,.7,.4,1);
+}
+@keyframes ram-fade { from { opacity: 0 } to { opacity: 1 } }
+@keyframes ram-pop {
+  from { opacity: 0; transform: translate(-50%, -46%); }
+  to { opacity: 1; transform: translate(-50%, -50%); }
+}
+.install-root .ram-hd {
+  display: flex; align-items: center;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--rule);
+  background: var(--bg-soft);
+}
+.install-root .ram-eyebrow {
+  font-family: 'Geist Mono', monospace;
+  font-size: 10.5px;
+  text-transform: uppercase; letter-spacing: 0.12em;
+  color: var(--muted);
+  flex: 1;
+}
+.install-root .ram-close {
+  appearance: none; border: 0;
+  background: transparent;
+  font-size: 22px; line-height: 1;
+  color: var(--muted);
+  width: 28px; height: 28px;
+  border-radius: 6px;
+  cursor: default;
+}
+.install-root .ram-close:hover { background: var(--bg-sunken); color: var(--ink); }
+
+.install-root .ram-body { padding: 22px 22px 20px; }
+.install-root .ram-body h2 {
+  font-size: 22px; font-weight: 600;
+  letter-spacing: -0.015em;
+  margin: 0 0 6px;
+}
+.install-root .ram-sub { font-size: 13.5px; color: var(--muted); margin: 0 0 18px; }
+
+.install-root .ram-field { margin-bottom: 12px; }
+.install-root .ram-field label {
+  display: block;
+  font-size: 12.5px;
+  color: var(--ink-soft);
+  font-weight: 500;
+  margin-bottom: 6px;
+}
+.install-root .ram-field label .hint { color: var(--muted); font-weight: 400; margin-left: 6px; font-size: 11.5px; }
+.install-root .ram-field input,
+.install-root .ram-field select {
+  width: 100%;
+  height: 40px;
+  padding: 0 12px;
+  border: 1px solid var(--rule-strong);
+  border-radius: 8px;
+  background: var(--bg);
+  font: inherit; font-family: inherit;
+  font-size: 14px;
+  color: var(--ink);
+  outline: none;
+  transition: border-color 140ms, box-shadow 140ms;
+}
+.install-root .ram-field select { appearance: none; padding-right: 30px;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'><path fill='%237a7975' d='M0 0h12L6 8z'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+}
+.install-root .ram-field input:focus,
+.install-root .ram-field select:focus {
+  border-color: var(--ink);
+  box-shadow: 0 0 0 3px rgba(10,10,9,0.08);
+}
+.install-root .ram-row { display: flex; gap: 10px; }
+.install-root .ram-row .ram-field { flex: 1; margin-bottom: 12px; }
+
+.install-root .ram-error {
+  margin: 6px 0 12px;
+  padding: 9px 12px;
+  background: oklch(0.95 0.05 25);
+  color: oklch(0.4 0.15 25);
+  border-radius: 6px;
+  font-size: 12.5px;
+}
+
+.install-root .ram-actions {
+  margin-top: 18px;
+  display: flex; gap: 8px;
+  justify-content: flex-end;
+}
+.install-root .ram-cancel, .install-root .ram-submit {
+  appearance: none; border: 0;
+  height: 40px; padding: 0 16px;
+  border-radius: 8px;
+  font: inherit; font-family: inherit;
+  font-weight: 500; font-size: 13.5px;
+  cursor: default;
+  transition: all 160ms;
+}
+.install-root .ram-cancel {
+  background: var(--bg);
+  border: 1px solid var(--rule-strong);
+  color: var(--ink-soft);
+}
+.install-root .ram-cancel:hover:not([disabled]) { background: var(--bg-soft); color: var(--ink); }
+.install-root .ram-submit { background: var(--ink); color: var(--bg); }
+.install-root .ram-submit:hover:not([disabled]) { background: #1f1f1c; }
+.install-root .ram-submit[disabled], .install-root .ram-cancel[disabled] {
+  opacity: 0.6; cursor: not-allowed;
+}
+
 .install-root .support {
   max-width: 1080px; margin: 0 auto;
   padding: 24px 28px 80px;

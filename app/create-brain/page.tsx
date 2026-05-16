@@ -161,7 +161,9 @@ export default function CreateBrainPage() {
 
   const doCreate = () => {
     if (!ready) return;
-    router.push('/workstation');
+    // After workspace creation: route through /install with the onboarding banner
+    // so the user can connect their first agent before landing in the workstation.
+    router.push('/install?from=brain');
   };
   const skip = () => router.push('/workstation');
 

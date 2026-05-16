@@ -1,8 +1,12 @@
 'use client';
 
 import Link from 'next/link';
-import { useMemo, useState, type ReactNode } from 'react';
+import { useSearchParams } from 'next/navigation';
+import { Suspense, useMemo, useState, type ReactNode } from 'react';
 import './install.css';
+import { InstallProvider, useKeySubstitutor, type RegisteredAgent } from './_components/InstallContext';
+import RegisterAgentModal from './_components/RegisterAgentModal';
+import RegisterBanner from './_components/RegisterBanner';
 
 type ClientId =
   | 'claude-desktop'
@@ -58,12 +62,13 @@ function CodeBlock({
   id: string;
 }) {
   const [copied, setCopied] = useState(false);
+  const sub = useKeySubstitutor();
   const plain = useMemo(
     () =>
       tokens
-        .map((line) => line.map((p) => (typeof p === 'string' ? p : p.t)).join(''))
+        .map((line) => line.map((p) => (typeof p === 'string' ? sub(p) : sub(p.t))).join(''))
         .join('\n'),
-    [tokens],
+    [tokens, sub],
   );
   return (
     <div className="code">
@@ -91,10 +96,10 @@ function CodeBlock({
           <span key={i}>
             {line.map((part, j) =>
               typeof part === 'string' ? (
-                <span key={j}>{part}</span>
+                <span key={j}>{sub(part)}</span>
               ) : (
                 <span key={j} className={part.c}>
-                  {part.t}
+                  {sub(part.t)}
                 </span>
               ),
             )}
@@ -640,8 +645,19 @@ function ClientBlock({ id }: { id: ClientId }) {
 
 // ───────── Page ─────────
 
-export default function InstallPage() {
-  const [client, setClient] = useState<ClientId>('claude-desktop');
+function InstallPageInner({
+  client,
+  setClient,
+  onOpenModal,
+  onRotate,
+}: {
+  client: ClientId;
+  setClient: (c: ClientId) => void;
+  onOpenModal: () => void;
+  onRotate: () => void;
+}) {
+  const params = useSearchParams();
+  const fromBrain = params.get('from') === 'brain';
   const [authTab, setAuthTab] = useState<'dashboard' | 'cli'>('dashboard');
 
   return (
@@ -715,6 +731,20 @@ export default function InstallPage() {
       </section>
 
       <section className="steps-wrap">
+        {fromBrain && (
+          <div className="onboard-banner" style={{ marginBottom: 16 }}>
+            <span className="num">✓</span>
+            <div className="txt">
+              <b>Workspace created.</b> Now connect your first agent. Pick a client above, click
+              <em> Generate API key</em>, and copy the snippets into your editor.
+            </div>
+            <Link className="skip" href="/workstation">skip → workstation</Link>
+          </div>
+        )}
+
+        {/* Register banner — drives the "generate key" flow */}
+        <RegisterBanner selectedClient={client} onOpenModal={onOpenModal} onRotate={onRotate} />
+
         {/* Step 1 — universal */}
         <Step num={1}>
           <h3>Get a workspace API key</h3>
@@ -894,11 +924,86 @@ export default function InstallPage() {
         <div className="row">
           <span>Need help? We answer in under 4 hours on weekdays.</span>
           <span className="grow" />
+          <Link href="/agents">Manage agents</Link>
           <a href="#">Discord</a>
           <a href="mailto:support@neverzero.cloud">support@neverzero.cloud</a>
-          <a href="#">Open a ticket</a>
         </div>
       </section>
     </div>
+  );
+}
+
+export default function InstallPage() {
+  const [client, setClient] = useState<ClientId>('claude-desktop');
+  const [apiKey, setApiKey] = useState<string | null>(null);
+  const [agent, setAgent] = useState<RegisteredAgent | null>(null);
+  const [modalOpen, setModalOpen] = useState(false);
+
+  const defaultAgentName = useMemo(() => {
+    const labels: Record<ClientId, string> = {
+      'claude-desktop': 'Claude Desktop',
+      'claude-code': 'Claude Code',
+      cursor: 'Cursor',
+      vscode: 'VS Code',
+      windsurf: 'Windsurf',
+      antigravity: 'Antigravity',
+      zed: 'Zed',
+      continue: 'Continue.dev',
+      aider: 'Aider',
+      custom: 'Custom client',
+    };
+    return labels[client] + ' agent';
+  }, [client]);
+
+  const contextValue = useMemo(
+    () => ({
+      apiKey,
+      workspace: 'acme',
+      agent,
+      setRegistration: (next: { agent: RegisteredAgent; apiKey: string } | null) => {
+        if (!next) {
+          setApiKey(null);
+          setAgent(null);
+        } else {
+          setApiKey(next.apiKey);
+          setAgent(next.agent);
+        }
+      },
+    }),
+    [apiKey, agent],
+  );
+
+  return (
+    <InstallProvider value={contextValue}>
+      <Suspense fallback={<div className="install-root" />}>
+        <InstallPageInner
+          client={client}
+          setClient={(c) => {
+            setClient(c);
+            // Clear the registered agent when switching clients — the key only
+            // matches the client it was minted for.
+            setApiKey(null);
+            setAgent(null);
+          }}
+          onOpenModal={() => setModalOpen(true)}
+          onRotate={() => {
+            setApiKey(null);
+            setAgent(null);
+            setModalOpen(true);
+          }}
+        />
+      </Suspense>
+      <RegisterAgentModal
+        open={modalOpen}
+        client={client}
+        defaultName={defaultAgentName}
+        onClose={() => setModalOpen(false)}
+        onRegistered={(reg, key) => {
+          setAgent(reg);
+          setApiKey(key);
+          setModalOpen(false);
+        }}
+      />
+    </InstallProvider>
   );
 }
