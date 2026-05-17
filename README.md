@@ -2,7 +2,7 @@
 
 # NeverZero
 
-**The shared context layer for AI-native teams.**
+**The shared context layer for AI-native teams. Future of SOFTWARE ENGINEERING. GIT FOR AGENTS.**
 
 One workspace. Many agents. Zero context loss across sessions, devices, or machines.
 
