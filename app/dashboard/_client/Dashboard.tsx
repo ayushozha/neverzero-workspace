@@ -700,6 +700,138 @@ function AfterSide({
   )
 }
 
+// ── Terminal tail (bottom panel — live mirror of agent tool calls) ───────────
+
+type TermFilter = 'all' | 'edit' | 'bash' | 'todo'
+
+function TerminalTail({
+  events, open, onToggle,
+}: {
+  events: LedgerEvent[]
+  open: boolean
+  onToggle: () => void
+}) {
+  const [filter, setFilter] = useState<TermFilter>('all')
+  const [expanded, setExpanded] = useState<Set<string>>(new Set())
+  const [paused, setPaused] = useState(false)
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const wasAtBottomRef = useRef(true)
+
+  // Exclude gstack-fixture events (those start with "/") — terminal mirrors
+  // real hook activity only. Then apply the chip filter.
+  const visible = events
+    .filter(e => !e.summary.startsWith('/'))
+    .filter(e => {
+      if (filter === 'all')  return true
+      if (filter === 'edit') return /^(Edit|Write)/.test(e.summary)
+      if (filter === 'bash') return /^Bash/.test(e.summary)
+      if (filter === 'todo') return /^Todos/.test(e.summary)
+      return true
+    })
+
+  // Auto-scroll to bottom on new events unless the user is reviewing history.
+  useEffect(() => {
+    if (paused || !scrollRef.current || !wasAtBottomRef.current) return
+    scrollRef.current.scrollTop = scrollRef.current.scrollHeight
+  }, [visible.length, paused, open])
+
+  const onScroll = useCallback(() => {
+    const el = scrollRef.current
+    if (!el) return
+    wasAtBottomRef.current = (el.scrollHeight - el.scrollTop - el.clientHeight) < 30
+  }, [])
+
+  const toggleExpand = useCallback((key: string) => {
+    setExpanded(prev => {
+      const next = new Set(prev)
+      next.has(key) ? next.delete(key) : next.add(key)
+      return next
+    })
+  }, [])
+
+  return (
+    <div className={`nz-term ${open ? 'open' : 'closed'}`}>
+      <button className="nz-term-bar" onClick={onToggle} type="button">
+        <span className="nz-term-bar-dots">
+          <span /><span /><span />
+        </span>
+        <span className="nz-term-bar-title">TERMINAL · live mirror</span>
+        <span className="nz-term-bar-meta">
+          {visible.length} event{visible.length === 1 ? '' : 's'}
+          {paused && open ? ' · paused' : ''}
+        </span>
+        <span className="nz-term-bar-chevron">{open ? '▾' : '▸'}</span>
+      </button>
+
+      {open && (
+        <>
+          <div className="nz-term-filters" onClick={e => e.stopPropagation()}>
+            {(['all', 'edit', 'bash', 'todo'] as TermFilter[]).map(f => (
+              <button
+                key={f}
+                type="button"
+                className={`nz-term-chip${filter === f ? ' active' : ''}`}
+                onClick={() => setFilter(f)}
+              >{f}</button>
+            ))}
+            <div className="nz-term-filters-spacer" />
+            <button
+              type="button"
+              className={`nz-term-chip pause${paused ? ' active' : ''}`}
+              onClick={() => setPaused(p => !p)}
+              title={paused ? 'Resume auto-scroll' : 'Pause auto-scroll'}
+            >{paused ? '▶ resume' : '⏸ pause'}</button>
+          </div>
+
+          <div className="nz-term-body" ref={scrollRef} onScroll={onScroll}>
+            {visible.length === 0 ? (
+              <div className="nz-term-empty">
+                <span className="nz-term-cursor">_</span>
+                <span>awaiting tool calls — start a Claude Code session in this directory</span>
+              </div>
+            ) : (
+              <>
+                {visible.map((ev, i) => {
+                  const key = `${ev.ts}-${i}`
+                  const isExpanded = expanded.has(key)
+                  const isFail  = ev.type === 'failure'
+                  const isStart = ev.type === 'task_started'
+                  const isDec   = ev.type === 'decision'
+                  const prefix  = isFail ? '✗' : isStart ? '▶' : isDec ? '◆' : '$'
+                  const cls     = isFail ? 'fail' : isStart ? 'start' : isDec ? 'dec' : ''
+                  return (
+                    <div
+                      key={key}
+                      className={`nz-term-row ${cls}${isExpanded ? ' open' : ''}`}
+                      onClick={() => toggleExpand(key)}
+                    >
+                      <span className="nz-term-time">{fmtTime(ev.ts)}</span>
+                      <span className="nz-term-prefix">{prefix}</span>
+                      <span className="nz-term-text">{ev.summary}</span>
+                      {isExpanded && (
+                        <div className="nz-term-detail">
+                          <span><b>agent</b> {ev.agent_id}</span>
+                          <span><b>type</b> {ev.type}</span>
+                          <span><b>ts</b> {ev.ts}</span>
+                          {ev.task && <span><b>task</b> {ev.task}</span>}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+                <div className="nz-term-tail">
+                  <span className="nz-term-prefix live">$</span>
+                  <span className="nz-term-cursor">_</span>
+                </div>
+              </>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
 // ── Main Dashboard ────────────────────────────────────────────────────────────
 
 const POLL_MS = 2000
@@ -708,6 +840,7 @@ export default function Dashboard({ initial }: { initial: DashboardPayload }) {
   const [data, setData] = useState<DashboardPayload>(initial)
   const [userStatus, setUserStatus] = useState<UserStatus>(initial.liveStatus)
   const [resumedAt, setResumedAt] = useState<string | null>(null)
+  const [termOpen, setTermOpen] = useState(true)
 
   // True once a death has been observed (real beam-resume or a manual re-enter).
   // Distinguishes "recovered after death" from "alive, never died".
@@ -795,6 +928,11 @@ export default function Dashboard({ initial }: { initial: DashboardPayload }) {
           onRestart={handleRestart}
         />
       </div>
+      <TerminalTail
+        events={data.ledger}
+        open={termOpen}
+        onToggle={() => setTermOpen(o => !o)}
+      />
     </div>
   )
 }
