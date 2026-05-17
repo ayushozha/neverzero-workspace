@@ -8,3 +8,4 @@ next-env.d.ts.bak
 legacy/
 data/agents.json
 
+data/research.json
