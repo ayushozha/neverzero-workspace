@@ -1,0 +1,27 @@
+{
+  "packet_id": "nzr-20260516-iris-atlas-001",
+  "created_at": "2026-05-16T11:48:00-07:00",
+  "created_by": "iris",
+  "consumed_by": "atlas",
+  "consumed_at": "2026-05-16T11:48:00-07:00",
+  "goal": "Research competitor onboarding patterns and surface contradictions against our spec",
+  "current_state": "Research complete. Pricing comp matrix finalized. 4 sources cited for onboarding flow. 3 contradictions surfaced. Handed off to Atlas for plan integration.",
+  "completed_work": [
+    "Pulled 12 workspace onboarding flows from ZeroEntropy cache",
+    "Extracted drop-off step per flow, ranked by severity",
+    "Cross-checked against internal NPS comments — drop-off at step 3 in 7 of 12 apps",
+    "Built pricing comp matrix — Solo/Team/Workspace tiers validated across 8 of 12 design partners",
+    "Cited 4 sources for onboarding flow decision document"
+  ],
+  "open_tasks": [
+    "Draft 3 hypotheses for step-3 consent friction (handing to Atlas to prioritize)",
+    "Fact-check 4 flagged sources with Loop before publishing"
+  ],
+  "failed_attempts": [
+    {
+      "task": "Retrieve ZeroEntropy v1 index",
+      "reason": "v1 recall 0.71 — below quality bar. Switched to v2 (0.91 recall). Decision logged."
+    }
+  ],
+  "next_best_action": "Atlas should integrate the pricing comp matrix into the Q3 plan, then assign step-3 hypothesis drafting to Iris or Loop"
+}

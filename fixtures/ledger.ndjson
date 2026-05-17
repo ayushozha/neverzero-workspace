@@ -1,0 +1,21 @@
+{"ts":"2026-05-16T08:44:00-07:00","agent_id":"atlas","type":"agent_joined","summary":"Atlas joined room-q3-launch"}
+{"ts":"2026-05-16T08:45:00-07:00","agent_id":"forge","type":"agent_joined","summary":"Forge joined room-q3-launch"}
+{"ts":"2026-05-16T09:00:00-07:00","agent_id":"iris","type":"agent_joined","summary":"Iris joined room-q3-launch"}
+{"ts":"2026-05-16T09:02:00-07:00","agent_id":"atlas","type":"task_claimed","task":"Replan Q3 milestones","summary":"Atlas claimed: Replan Q3 milestones"}
+{"ts":"2026-05-16T09:05:00-07:00","agent_id":"loop","type":"agent_joined","summary":"Loop joined room-q3-launch"}
+{"ts":"2026-05-16T09:10:00-07:00","agent_id":"iris","type":"task_claimed","task":"Research competitor onboarding patterns","summary":"Iris claimed: Research competitor onboarding patterns"}
+{"ts":"2026-05-16T09:15:00-07:00","agent_id":"loop","type":"failure","task":"Review PR #281","summary":"Loop flagged a blocker on PR #281 — 3 nits, 1 blocker. Review returned."}
+{"ts":"2026-05-16T09:20:00-07:00","agent_id":"forge","type":"task_claimed","task":"Wire OAuth + agent SSO across providers","summary":"Forge claimed: Wire OAuth + agent SSO across providers"}
+{"ts":"2026-05-16T09:45:00-07:00","agent_id":"beam","type":"agent_joined","summary":"Beam joined room-q3-launch"}
+{"ts":"2026-05-16T10:02:00-07:00","agent_id":"iris","type":"decision","summary":"Decided: Move retrieval to ZeroEntropy v2 — top-3 recall jumped from 0.71 → 0.91 in eval"}
+{"ts":"2026-05-16T10:30:00-07:00","agent_id":"cursor","type":"agent_joined","summary":"Cursor joined room-q3-launch (external runtime)"}
+{"ts":"2026-05-16T10:31:00-07:00","agent_id":"cursor","type":"task_claimed","task":"Wire OAuth + agent SSO across providers","summary":"Cursor attempted to claim: Wire OAuth + agent SSO across providers"}
+{"ts":"2026-05-16T10:32:00-07:00","agent_id":"cursor","type":"conflict_detected","task":"Wire OAuth + agent SSO across providers","summary":"Forge already owns this task — Cursor yielding. Conflict resolved by registry."}
+{"ts":"2026-05-16T10:45:00-07:00","agent_id":"atlas","type":"decision","summary":"Decided: Workspace tier ships with shared memory and agent SSO. Validated by 8 of 12 design partners."}
+{"ts":"2026-05-16T11:00:00-07:00","agent_id":"atlas","type":"task_released","task":"Replan Q3 milestones","summary":"Atlas completed: Q3 milestones replanned — 12 tasks decomposed, 5 assigned to agents"}
+{"ts":"2026-05-16T11:30:00-07:00","agent_id":"atlas","type":"decision","summary":"Decided: Onboarding must show one real agent doing real work within 60 seconds. No screencast, no preamble."}
+{"ts":"2026-05-16T11:48:00-07:00","agent_id":"iris","type":"handoff_created","summary":"Iris created handoff for Atlas — pricing comp matrix ready for plan integration"}
+{"ts":"2026-05-16T11:48:00-07:00","agent_id":"atlas","type":"resume_consumed","summary":"Atlas consumed Iris's handoff — accepted pricing matrix, updating Q3 plan"}
+{"ts":"2026-05-16T11:58:00-07:00","agent_id":"forge","type":"research_evidence","summary":"Forge pushed auth/oauth-rewrite · 14 files, 2 tests pending · PR #284 open for review"}
+{"ts":"2026-05-16T12:02:00-07:00","agent_id":"iris","type":"research_evidence","summary":"Iris cited 4 sources for Onboarding flow — drop-off occurs at step 3 in 7 of 12 reviewed apps"}
+{"ts":"2026-05-16T12:05:00-07:00","agent_id":"beam","type":"failure","summary":"Beam heartbeat missed — last seen 2h 15m ago. Agent marked dead. Deploy task requires manual handoff."}

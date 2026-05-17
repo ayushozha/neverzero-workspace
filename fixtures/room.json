@@ -1,0 +1,73 @@
+{
+  "room_id": "room-q3-launch",
+  "name": "Q3 Launch · NeverZero Workstation",
+  "created_at": "2026-05-16T08:44:00-07:00",
+  "agents": [
+    {
+      "agent_id": "iris",
+      "name": "Iris",
+      "glyph": "IR",
+      "role": "research-agent",
+      "runtime": "ZeroEntropy",
+      "machine": "ze-retriever-2",
+      "task": "Comparing onboarding patterns across 12 SaaS workspaces. Surfacing 3 contradictions in our spec.",
+      "status": "working",
+      "last_heartbeat": "2026-05-16T12:19:45-07:00"
+    },
+    {
+      "agent_id": "forge",
+      "name": "Forge",
+      "glyph": "FG",
+      "role": "build-agent",
+      "runtime": "GStack",
+      "machine": "gs-coder-7b",
+      "task": "Wiring the onboarding flow against the new auth provider · PR #284",
+      "status": "working",
+      "last_heartbeat": "2026-05-16T12:19:50-07:00"
+    },
+    {
+      "agent_id": "atlas",
+      "name": "Atlas",
+      "glyph": "AT",
+      "role": "planning-agent",
+      "runtime": "GBrain",
+      "machine": "gb-planner-l",
+      "task": "Integrating Iris's pricing matrix into Q3 plan",
+      "status": "working",
+      "last_heartbeat": "2026-05-16T12:18:30-07:00"
+    },
+    {
+      "agent_id": "loop",
+      "name": "Loop",
+      "glyph": "LP",
+      "role": "review-agent",
+      "runtime": "The Hog",
+      "machine": "hog-judge-3",
+      "task": null,
+      "status": "idle",
+      "last_heartbeat": "2026-05-16T12:08:00-07:00"
+    },
+    {
+      "agent_id": "cursor",
+      "name": "Cursor",
+      "glyph": "CR",
+      "role": "ext-agent",
+      "runtime": "cursor-ide",
+      "machine": "cursor-local",
+      "task": null,
+      "status": "stale",
+      "last_heartbeat": "2026-05-16T10:35:00-07:00"
+    },
+    {
+      "agent_id": "beam",
+      "name": "Beam",
+      "glyph": "BM",
+      "role": "deploy-agent",
+      "runtime": "Lightsprint",
+      "machine": "ls-runner-1",
+      "task": null,
+      "status": "dead",
+      "last_heartbeat": "2026-05-16T09:50:00-07:00"
+    }
+  ]
+}

@@ -1,0 +1,26 @@
+{
+  "packet_id": "nzr-20260516-beam-resume-001",
+  "agent_id": "beam",
+  "died_at": "2026-05-16T09:50:00-07:00",
+  "goal": "Deploy NeverZero v2.18.4 to Lightsprint staging, run 15-min canary, write release notes from decision log",
+  "last_known_state": "Build confirmed green by Forge (PR #284 · 14 files · all tests passing). Lightsprint staging slot confirmed open. Previous Beam instance lost heartbeat at 09:50 before deploy began — no partial deploy was started.",
+  "completed_work": [
+    "Confirmed Forge's build is green — PR #284, 14 files, all tests passing",
+    "Verified Lightsprint staging slot is available and unclaimed",
+    "Last successful deploy was v2.18.3 yesterday — zero rollback events"
+  ],
+  "open_tasks": [
+    "Deploy v2.18.4 to Lightsprint staging",
+    "Run 15-minute canary against production traffic baseline",
+    "Monitor error budget — rollback threshold is >0.1% increase",
+    "Write release notes from decision log (4 decisions to document)"
+  ],
+  "failed_attempts": [
+    {
+      "task": "Begin staging deploy",
+      "reason": "Heartbeat lost at 09:50. Agent did not start the deploy before timeout. No partial state to clean up."
+    }
+  ],
+  "resume_prompt": "You are Beam, deploy-agent (ls-runner-1, Lightsprint). The previous Beam instance died before completing the staging deploy.\n\nBuild is green: PR #284 by Forge, 14 files, all tests passing.\nStaging slot: confirmed open on Lightsprint.\nLast clean deploy: v2.18.3 (yesterday, zero rollback events).\n\nYour tasks:\n1. Deploy v2.18.4 to Lightsprint staging\n2. Run 15-minute canary against production traffic baseline\n3. Monitor error budget — rollback if >0.1% increase\n4. Write release notes from the decision log (4 decisions)\n\nNo blockers. No partial state to clean up. Begin immediately.",
+  "next_best_action": "Deploy v2.18.4 to Lightsprint staging now. Build is confirmed green. Staging slot is open. Run canary immediately after."
+}

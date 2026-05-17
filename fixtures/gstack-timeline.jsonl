@@ -1,0 +1,10 @@
+{"skill":"office-hours","event":"started","ts":"2026-05-16T08:10:00-07:00"}
+{"skill":"office-hours","event":"completed","outcome":"pass","duration_s":180,"ts":"2026-05-16T08:13:00-07:00"}
+{"skill":"plan-ceo-review","event":"started","ts":"2026-05-16T08:15:00-07:00"}
+{"skill":"plan-ceo-review","event":"completed","outcome":"pass","duration_s":240,"ts":"2026-05-16T08:19:00-07:00"}
+{"skill":"autoplan","event":"started","branch":"main","ts":"2026-05-16T08:20:00-07:00"}
+{"skill":"autoplan","event":"completed","outcome":"pass","duration_s":420,"branch":"main","ts":"2026-05-16T08:27:00-07:00"}
+{"skill":"review","event":"started","branch":"feat/resume-panel","ts":"2026-05-16T09:30:00-07:00"}
+{"skill":"review","event":"completed","outcome":"pass","duration_s":55,"branch":"feat/resume-panel","ts":"2026-05-16T09:30:55-07:00"}
+{"skill":"ship","event":"started","branch":"feat/resume-panel","ts":"2026-05-16T09:32:00-07:00"}
+{"skill":"ship","event":"completed","outcome":"pass","duration_s":90,"branch":"feat/resume-panel","ts":"2026-05-16T09:33:30-07:00"}

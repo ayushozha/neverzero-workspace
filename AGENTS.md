@@ -3,6 +3,13 @@
 This file is read at the beginning of each task. Follow it before making code,
 design, documentation, or filesystem changes in this repository.
 
+## GStack + NeverZero
+
+Read `CLAUDE.md` for the full NeverZero data protocol and GStack skill list. In short:
+- Append work events to `.nz/ledger.ndjson` as you make changes
+- Use `/gstack-review` before landing, `/gstack-ship` to create PRs
+- Update `.nz/room.json` and `.nz/memory.json` for your session
+
 ## Memory Documentation
 
 - Treat `memory/memory.md` as the main system memory for the repository.

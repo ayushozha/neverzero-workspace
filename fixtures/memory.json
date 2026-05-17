@@ -1,0 +1,60 @@
+{
+  "room_id": "room-q3-launch",
+  "updated_at": "2026-05-16T12:02:00-07:00",
+  "goals": [
+    "Ship NeverZero Workstation beta to 200 design partner teams by Jun 20",
+    "Show one real agent doing real work within 60s of signup — no screencast, no preamble",
+    "Make AI work multiplayer: registered, coordinated, remembered, resumable"
+  ],
+  "constraints": [
+    "Never say 'AI assistant' — always 'agent' or by name (Iris, Forge, etc.)",
+    "Workspace tier must have shared memory and agent SSO — keep this distinction sharp",
+    "Deploy pipeline goes through Lightsprint only — cold start 3× faster on agent workloads",
+    "ZeroEntropy v2 for retrieval — 0.91 recall, do not revert to v1"
+  ],
+  "decisions": [
+    {
+      "id": "dec-001",
+      "ts": "2026-05-16T10:45:00-07:00",
+      "agent_id": "atlas",
+      "text": "Workspace tier ships with shared memory and agent SSO — differentiates from Solo/Team",
+      "status": "accepted"
+    },
+    {
+      "id": "dec-002",
+      "ts": "2026-05-16T11:30:00-07:00",
+      "agent_id": "atlas",
+      "text": "Onboarding shows one real agent doing real work in <60s — Iris (research-agent) is the default first agent",
+      "status": "accepted"
+    },
+    {
+      "id": "dec-003",
+      "ts": "2026-05-16T10:02:00-07:00",
+      "agent_id": "iris",
+      "text": "Move retrieval to ZeroEntropy v2 — top-3 recall jumped from 0.71 → 0.91 in eval",
+      "status": "accepted"
+    },
+    {
+      "id": "dec-004",
+      "ts": "2026-05-16T09:00:00-07:00",
+      "agent_id": "atlas",
+      "text": "Rejected: deploy through legacy runner — cold start 3× slower on agent workloads",
+      "status": "rejected"
+    }
+  ],
+  "rejected_approaches": [
+    "Legacy deploy runner (cold start 3× slower on agent workloads)",
+    "ZeroEntropy v1 index (0.71 recall — below quality bar)",
+    "Screencast-based onboarding (violates 'real agent doing real work' requirement)",
+    "Single-tier pricing (doesn't differentiate shared memory and agent SSO)"
+  ],
+  "files_touched": [
+    "fixtures/room.json",
+    "fixtures/ledger.ndjson",
+    "fixtures/memory.json",
+    "fixtures/latest.nzr.json",
+    "app/dashboard/page.tsx",
+    "app/dashboard/dashboard.css",
+    "app/dashboard/_client/Dashboard.tsx"
+  ]
+}

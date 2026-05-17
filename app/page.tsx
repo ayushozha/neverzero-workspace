@@ -13,6 +13,7 @@ export default function LandingPage() {
             <span className="name">NeverZero<span className="sm">Cloud</span></span>
           </Link>
           <div className="nav-links">
+            <Link href="/dashboard" style={{ fontWeight: 600 }}>Mission Control ↗</Link>
             <a href="#product">Product</a>
             <a href="#agents">Agents</a>
             <a href="#anywhere">Anywhere</a>

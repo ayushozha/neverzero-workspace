@@ -6,3 +6,11 @@ out
 *.tsbuildinfo
 next-env.d.ts.bak
 legacy/
+
+# Live agent work record (per CLAUDE.md NeverZero protocol)
+.nz/
+
+# Local dev artifacts
+*.log
+*.pid
+state.json
