@@ -1,5 +1,7 @@
 /* Landing — scoped under .landing-root */
 
+.landing-root { overflow-x: clip; }
+
 .landing-root .nav {
   position: sticky; top: 0; z-index: 50;
   background: rgba(255,255,255,0.82);
@@ -75,20 +77,27 @@
 }
 
 .landing-root .hero {
-  padding-top: 84px;
-  padding-bottom: 64px;
+  padding-top: clamp(64px, 7vw, 92px);
+  padding-bottom: clamp(56px, 6vw, 84px);
   position: relative;
   overflow: hidden;
 }
-.landing-root .hero .wrap { max-width: 1180px; }
+.landing-root .hero .wrap {
+  max-width: 1180px;
+  display: grid;
+  grid-template-columns: minmax(0, 1.18fr) minmax(360px, 0.82fr);
+  column-gap: clamp(32px, 4.5vw, 56px);
+  align-items: center;
+}
 .landing-root .hero .eyebrow { margin-bottom: 28px; }
 .landing-root .hero h1 {
-  font-size: clamp(56px, 9.2vw, 132px);
+  font-size: clamp(54px, 6.5vw, 96px);
   font-weight: 600;
   letter-spacing: -0.035em;
-  line-height: 0.95;
+  line-height: 0.96;
   margin: 0;
   color: var(--ink);
+  max-width: 680px;
 }
 .landing-root .hero h1 .second { display: block; color: var(--muted); font-weight: 400; }
 .landing-root .hero .lede {
@@ -130,11 +139,11 @@
 .landing-root .hero-foot .check { display: inline-flex; align-items: center; gap: 5px; }
 
 .landing-root .hero-demo {
-  position: absolute;
-  right: max(40px, calc(50vw - 580px));
-  top: 50%;
-  transform: translateY(-50%);
-  width: 520px;
+  position: relative;
+  grid-column: 2;
+  grid-row: 1 / span 5;
+  justify-self: end;
+  width: min(100%, 520px);
   pointer-events: none;
 }
 .landing-root .hero-demo .card {
@@ -155,6 +164,7 @@
   padding: 12px 16px;
   border-bottom: 1px solid var(--rule);
   background: var(--bg-soft);
+  min-width: 0;
 }
 .landing-root .hero-demo .card-hd .dots { display: flex; gap: 5px; }
 .landing-root .hero-demo .card-hd .dots span { width: 8px; height: 8px; border-radius: 50%; background: var(--rule-strong); }
@@ -167,6 +177,7 @@
   background: var(--bg);
   border: 1px solid var(--rule);
   margin-left: 6px;
+  white-space: nowrap;
 }
 .landing-root .hero-demo .card-hd .tab .live {
   display: inline-block; width: 5px; height: 5px; border-radius: 50%;
@@ -178,6 +189,10 @@
   font-family: 'Geist Mono', monospace;
   font-size: 10.5px;
   color: var(--muted);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .landing-root .demo-doc { padding: 22px 24px 18px; }
@@ -211,7 +226,15 @@
   display: inline-flex; align-items: center; justify-content: center;
 }
 .landing-root .demo-agent .top .nm { font-size: 13px; font-weight: 500; }
-.landing-root .demo-agent .top .role { font-family: 'Geist Mono', monospace; font-size: 11px; color: var(--muted); }
+.landing-root .demo-agent .top .role {
+  font-family: 'Geist Mono', monospace;
+  font-size: 11px;
+  color: var(--muted);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .landing-root .demo-agent .top .live {
   margin-left: auto;
   font-size: 11px; color: var(--agent-color); font-weight: 500;
@@ -228,6 +251,7 @@
   padding: 4px 0;
   font-size: 12.5px; color: var(--ink-soft);
 }
+.landing-root .demo-agent .step > span:nth-child(2) { min-width: 0; }
 .landing-root .demo-agent .step .m {
   width: 12px; height: 12px;
   display: inline-flex; align-items: center; justify-content: center;
@@ -264,8 +288,24 @@
 }
 
 @media (max-width: 1100px) {
-  .landing-root .hero-demo { position: relative; right: auto; top: auto; transform: none; margin-top: 56px; width: 100%; max-width: 560px; }
+  .landing-root .hero .wrap { display: block; }
+  .landing-root .hero h1 { max-width: 760px; }
+  .landing-root .hero-demo { margin-top: 56px; width: 100%; max-width: 560px; }
   .landing-root .hero-demo .card { transform: none; }
+}
+
+@media (max-width: 640px) {
+  .landing-root .nav-inner { gap: 12px; padding: 0 20px; }
+  .landing-root .nav-right a.signin { display: none; }
+  .landing-root .nav-right a.cta { font-size: 13px; padding: 9px 12px; }
+  .landing-root .hero { padding-top: 56px; }
+  .landing-root .hero h1 { font-size: clamp(44px, 14vw, 58px); }
+  .landing-root .hero .lede { margin-top: 24px; }
+  .landing-root .hero-ctas,
+  .landing-root .hero-foot { flex-wrap: wrap; }
+  .landing-root .hero-demo .card-hd { padding: 11px 12px; }
+  .landing-root .hero-demo .card-hd .tab { margin-left: 2px; }
+  .landing-root .demo-doc { padding: 18px 16px 16px; }
 }
 
 .landing-root .providers {

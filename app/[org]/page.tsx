@@ -42,6 +42,7 @@ export default async function OrgHomePage({
         </div>
 
         <div className="actions">
+          <Link className="btn ghost" href={`/${org.slug}/workstation`}>Open workstation</Link>
           <Link className="btn primary" href={`/${org.slug}/install`}>
             Install in your agent →
           </Link>

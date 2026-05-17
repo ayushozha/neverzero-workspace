@@ -18,6 +18,52 @@ export type Agent = {
   lastSeen: string;
 };
 
+export const MAX_VISIBLE_DOC_AGENTS = 5;
+
+function minutesSinceLastSeen(label: string): number {
+  const match = label.trim().match(/^(\d+(?:\.\d+)?)\s*([mhd])$/i);
+  if (!match) return Number.POSITIVE_INFINITY;
+
+  const amount = Number(match[1]);
+  const unit = match[2].toLowerCase();
+
+  if (unit === 'h') return amount * 60;
+  if (unit === 'd') return amount * 60 * 24;
+  return amount;
+}
+
+function isActiveDocAgent(agent: Agent): boolean {
+  return agent.attached && (agent.state === 'working' || agent.statusShort.trim().length > 0 || agent.lastSeen.trim().length > 0);
+}
+
+function agentActivityScore(agent: Agent): number {
+  const recentMinutes = minutesSinceLastSeen(agent.lastSeen);
+  const recencyScore = Number.isFinite(recentMinutes) ? Math.max(0, 720 - recentMinutes) : 0;
+
+  return (
+    (agent.state === 'working' ? 10_000 : 0) +
+    (agent.statusShort.trim() ? 500 : 0) +
+    recencyScore
+  );
+}
+
+export function getTopActiveAgents(agents: Agent[], limit = MAX_VISIBLE_DOC_AGENTS): Agent[] {
+  return agents
+    .map((agent, index) => ({ agent, index }))
+    .filter(({ agent }) => isActiveDocAgent(agent))
+    .sort((left, right) => {
+      const scoreDelta = agentActivityScore(right.agent) - agentActivityScore(left.agent);
+      if (scoreDelta !== 0) return scoreDelta;
+      return left.index - right.index;
+    })
+    .map(({ agent }) => agent)
+    .slice(0, Math.max(0, limit));
+}
+
+export function countWorkingAgents(agents: Agent[]): number {
+  return agents.filter((agent) => agent.state === 'working').length;
+}
+
 export type Person = {
   id: string;
   name: string;

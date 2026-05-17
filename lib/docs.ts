@@ -141,3 +141,26 @@ export async function updateDoc(id: string, patch: Partial<DocNode>): Promise<Do
   await writeStore(s);
   return updated;
 }
+
+export async function deleteDocTree(id: string): Promise<string[]> {
+  const s = await readStore();
+  const target = s.docs.find((d) => d.id === id);
+  if (!target) return [];
+
+  const ids = new Set<string>([id]);
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const doc of s.docs) {
+      if (doc.parentId && ids.has(doc.parentId) && !ids.has(doc.id)) {
+        ids.add(doc.id);
+        changed = true;
+      }
+    }
+  }
+
+  const nextDocs = s.docs.filter((d) => !ids.has(d.id));
+  if (nextDocs.length === s.docs.length) return [];
+  await writeStore({ docs: nextDocs });
+  return Array.from(ids);
+}

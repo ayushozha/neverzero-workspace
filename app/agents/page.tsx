@@ -6,6 +6,7 @@ import './agents.css';
 export const dynamic = 'force-dynamic';
 
 const CLIENT_LABELS: Record<string, string> = {
+  codex: 'Codex / GStack',
   'claude-desktop': 'Claude Desktop',
   'claude-code': 'Claude Code',
   cursor: 'Cursor',
@@ -33,6 +34,14 @@ function StatusPill({ status }: { status: Agent['status'] }) {
       {status}
     </span>
   );
+}
+
+function meta(agent: Agent, key: string): string {
+  return agent.metadata[key] ?? '';
+}
+
+function compact(value: string, fallback: string = 'not reported'): string {
+  return value.trim() || fallback;
 }
 
 export default async function AgentsPage() {
@@ -92,11 +101,11 @@ export default async function AgentsPage() {
             <thead>
               <tr>
                 <th>Name</th>
-                <th>From</th>
-                <th>Key</th>
+                <th>Runtime / Machine</th>
                 <th>Status</th>
-                <th>Owner</th>
-                <th>Created</th>
+                <th>Current task</th>
+                <th>Session / Capabilities</th>
+                <th>Key</th>
                 <th>Last seen</th>
                 <th />
               </tr>
@@ -107,19 +116,29 @@ export default async function AgentsPage() {
                   <td>
                     <div className="name">{a.name}</div>
                     <div className="sub">{a.id}</div>
+                    {meta(a, 'parent_agent_id') && (
+                      <div className="sub">parent {meta(a, 'parent_agent_id')}</div>
+                    )}
                   </td>
                   <td>
-                    <div className="from">{CLIENT_LABELS[a.from] || a.from}</div>
+                    <div className="from">{a.platform.runtime || CLIENT_LABELS[a.from] || a.from}</div>
                     {a.platform.machine && (
                       <div className="sub">{a.platform.machine}{a.platform.os ? ` · ${a.platform.os}` : ''}</div>
                     )}
+                    <div className="sub">{CLIENT_LABELS[a.from] || a.from}</div>
+                  </td>
+                  <td><StatusPill status={a.status} /></td>
+                  <td className="task">
+                    <div>{compact(meta(a, 'current_task'))}</div>
+                    <div className="sub">owner {a.ownedBy} · created {relative(a.createdAt)}</div>
+                  </td>
+                  <td className="task">
+                    <div className="sub">session {compact(meta(a, 'session_id'), 'none yet')}</div>
+                    <div>{compact(meta(a, 'capabilities'))}</div>
                   </td>
                   <td>
                     <code className="key">{a.apiKeyPrefix}…</code>
                   </td>
-                  <td><StatusPill status={a.status} /></td>
-                  <td><span className="owner">{a.ownedBy}</span></td>
-                  <td className="ts">{relative(a.createdAt)}</td>
                   <td className="ts">{a.lastSeenAt ? relative(a.lastSeenAt) : '—'}</td>
                   <td className="actions">
                     {a.status !== 'revoked' && <RevokeButton id={a.id} />}

@@ -49,7 +49,7 @@ export default async function OrgBrainPage({
     ? (org.providers as OrgProviderId[])
     : ((await setOrgProviders(org.slug, DEFAULT_PROVIDERS)) as OrgProviderId[] | undefined ?? DEFAULT_PROVIDERS);
 
-  await ensureBrainRoot(org.slug);
+  const rootDoc = await ensureBrainRoot(org.slug);
 
   const [registeredAgents, allDocs, allResearch] = await Promise.all([
     listAgents({ orgSlug: org.slug }),
@@ -61,6 +61,7 @@ export default async function OrgBrainPage({
     .filter((d) => d.kind === 'subfile')
     .map((d) => ({
       id: d.id,
+      parentId: d.parentId,
       title: d.title,
       createdAt: d.createdAt,
       skillRun: d.skillRun
@@ -101,6 +102,7 @@ export default async function OrgBrainPage({
 
   const orgData: BrainOrgData = {
     slug: org.slug, name: org.name, domain: org.domain,
+    brainDocId: rootDoc.id,
     tagline: org.tagline, mission: org.mission,
     industry: org.industry, stage: org.stage, founded: org.founded, hq: org.hq,
     createdAt: org.createdAt,

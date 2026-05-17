@@ -126,6 +126,121 @@
 .workstation-root .side-row.indent { padding-left: 26px; font-size: 13px; }
 .workstation-root .side-row.indent.deep { padding-left: 38px; }
 
+.workstation-root .brain-tree-sec {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.workstation-root .brain-tree-sec span {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.workstation-root .brain-tree-head-action,
+.workstation-root .brain-file-action {
+  -webkit-appearance: none;
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: default;
+}
+.workstation-root .brain-tree-head-action {
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+  opacity: 0.85;
+}
+.workstation-root .brain-tree-head-action:hover,
+.workstation-root .brain-file-action:hover {
+  background: rgba(0,0,0,0.06);
+  color: var(--ink);
+}
+.workstation-root .brain-tree-head-action:disabled,
+.workstation-root .brain-file-action:disabled {
+  opacity: 0.45;
+  pointer-events: none;
+}
+.workstation-root .brain-file-tree {
+  display: grid;
+  gap: 1px;
+}
+.workstation-root .brain-file-row {
+  min-height: 30px;
+  padding: 1px 4px 1px calc(10px + (var(--tree-depth, 0) * 18px));
+  overflow: hidden;
+}
+.workstation-root .brain-file-main {
+  min-width: 0;
+  flex: 1;
+  width: 100%;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: inherit;
+  text-decoration: none;
+}
+.workstation-root .brain-file-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.workstation-root .brain-file-actions {
+  position: absolute;
+  top: 50%;
+  right: 5px;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  background: color-mix(in oklch, var(--bg-soft) 78%, white);
+  border-radius: var(--radius-sm);
+  padding: 1px;
+  transition: opacity var(--t-fast);
+}
+.workstation-root .brain-file-row:hover .brain-file-actions,
+.workstation-root .brain-file-row:focus-within .brain-file-actions,
+.workstation-root .brain-file-row.active .brain-file-actions {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+}
+.workstation-root .brain-file-action {
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+  font-family: 'Geist Mono', monospace;
+  font-size: 10px;
+  line-height: 1;
+}
+.workstation-root .brain-file-action.danger:hover,
+.workstation-root .brain-side-error {
+  color: oklch(0.55 0.14 25);
+}
+.workstation-root .brain-file-empty,
+.workstation-root .brain-side-error {
+  padding: 6px 10px 6px 34px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
 .workstation-root .side-agent { display: flex; align-items: center; gap: 8px; padding: 5px 10px; border-radius: var(--radius-sm); }
 .workstation-root .side-agent:hover { background: rgba(0,0,0,0.04); }
 .workstation-root .side-agent .av {

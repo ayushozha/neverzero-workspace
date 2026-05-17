@@ -2,10 +2,11 @@
 
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { Suspense, useMemo, useState, type ReactNode } from 'react';
+import { Suspense, useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react';
 import './install.css';
 
 type Shell = 'powershell' | 'bash';
+type OsChoice = 'auto' | 'mac' | 'win' | 'linux' | 'wsl';
 type ClientId =
   | 'codex'
   | 'claude-code'
@@ -13,6 +14,9 @@ type ClientId =
   | 'cursor'
   | 'vscode'
   | 'windsurf'
+  | 'continue'
+  | 'zed'
+  | 'antigravity'
   | 'aider'
   | 'custom';
 
@@ -23,7 +27,33 @@ type ClientDef = {
   runtime: string;
   meta: string;
   rulesFile: string;
+  pasteTarget: string;
   note: string;
+  recommended?: boolean;
+};
+
+type RegisteredAgent = {
+  id: string;
+  name: string;
+  from: ClientId;
+  apiKeyPrefix: string;
+  workspace: string;
+  orgSlug: string;
+  status: 'pending' | 'connected' | 'revoked';
+  createdAt: string;
+  lastSeenAt: string | null;
+  platform: {
+    os?: 'mac' | 'win' | 'linux' | 'wsl' | null;
+    runtime?: string;
+    machine?: string;
+  };
+  metadata: Record<string, string>;
+};
+
+type Registration = {
+  agent: RegisteredAgent;
+  apiKey: string;
+  installSnippet?: string;
 };
 
 const CLIENTS: ClientDef[] = [
@@ -32,9 +62,11 @@ const CLIENTS: ClientDef[] = [
     glyph: 'CX',
     name: 'Codex / GStack',
     runtime: 'codex',
-    meta: 'CLI runtime',
+    meta: 'CLI + desktop app',
     rulesFile: 'AGENTS.md',
-    note: 'Best fit for this repo. Use the repo instructions plus nz status at task start.',
+    pasteTarget: 'Project AGENTS.md or Codex custom instructions',
+    note: 'Best fit for this repo. Put the bootstrap prompt near the top of AGENTS.md.',
+    recommended: true,
   },
   {
     id: 'claude-code',
@@ -43,16 +75,18 @@ const CLIENTS: ClientDef[] = [
     runtime: 'claude-code',
     meta: 'terminal agent',
     rulesFile: 'CLAUDE.md',
-    note: 'Add the task-start and handoff commands to the project CLAUDE.md.',
+    pasteTarget: 'Project CLAUDE.md',
+    note: 'Use this when Claude Code opens the repository from a terminal.',
   },
   {
     id: 'claude-desktop',
     glyph: 'CD',
     name: 'Claude Desktop',
     runtime: 'claude-desktop',
-    meta: 'manual bridge',
-    rulesFile: 'project notes',
-    note: 'Use nz status and nz resume output as the context you paste into the chat.',
+    meta: 'desktop chat',
+    rulesFile: 'project prompt',
+    pasteTarget: 'Project instructions or the first chat message',
+    note: 'Use the prompt as the first message or a saved project instruction.',
   },
   {
     id: 'cursor',
@@ -61,7 +95,8 @@ const CLIENTS: ClientDef[] = [
     runtime: 'cursor',
     meta: 'editor agent',
     rulesFile: '.cursorrules',
-    note: 'Put the command checklist in .cursorrules so Composer checks the room first.',
+    pasteTarget: '.cursorrules',
+    note: 'Composer should fetch context before it starts planning or editing.',
   },
   {
     id: 'vscode',
@@ -70,7 +105,8 @@ const CLIENTS: ClientDef[] = [
     runtime: 'vscode',
     meta: 'editor agent',
     rulesFile: '.github/copilot-instructions.md',
-    note: 'Use the same CLI commands from the integrated terminal.',
+    pasteTarget: '.github/copilot-instructions.md',
+    note: 'Works for Copilot-style project instructions plus terminal curl smoke tests.',
   },
   {
     id: 'windsurf',
@@ -79,7 +115,38 @@ const CLIENTS: ClientDef[] = [
     runtime: 'windsurf',
     meta: 'editor agent',
     rulesFile: '.windsurfrules',
-    note: 'Keep the rules file short: status before work, handoff before stopping.',
+    pasteTarget: '.windsurfrules',
+    note: 'Keep the prompt short and mandatory so Cascade starts with the cloud context.',
+  },
+  {
+    id: 'continue',
+    glyph: 'Co',
+    name: 'Continue.dev',
+    runtime: 'continue',
+    meta: 'IDE extension',
+    rulesFile: 'continue prompt',
+    pasteTarget: 'Continue custom instructions',
+    note: 'Paste the prompt into the assistant instructions used for this workspace.',
+  },
+  {
+    id: 'zed',
+    glyph: 'Zd',
+    name: 'Zed',
+    runtime: 'zed',
+    meta: 'editor agent',
+    rulesFile: 'Zed assistant rules',
+    pasteTarget: 'Zed assistant project context',
+    note: 'Use the env block in the shell that launches the assistant bridge.',
+  },
+  {
+    id: 'antigravity',
+    glyph: 'AG',
+    name: 'Antigravity',
+    runtime: 'antigravity',
+    meta: 'agent IDE',
+    rulesFile: 'agent instruction file',
+    pasteTarget: 'Antigravity workspace instructions',
+    note: 'The differentiator is the runtime, machine, session id, and active task payload.',
   },
   {
     id: 'aider',
@@ -88,18 +155,33 @@ const CLIENTS: ClientDef[] = [
     runtime: 'aider',
     meta: 'terminal agent',
     rulesFile: 'CONVENTIONS.md',
-    note: 'Run nz commands in the same project directory before and after the Aider session.',
+    pasteTarget: 'CONVENTIONS.md or the launch prompt',
+    note: 'Run the smoke-test commands in the same shell before starting Aider.',
   },
   {
     id: 'custom',
     glyph: '{}',
     name: 'Custom runner',
     runtime: 'custom',
-    meta: 'any shell',
+    meta: 'REST client',
     rulesFile: 'runner prompt',
-    note: 'Any agent that can run shell commands can participate in the .nz room.',
+    pasteTarget: 'System prompt for the custom runner',
+    note: 'Any agent that can make HTTP calls can use the same protocol.',
   },
 ];
+
+function cleanSlug(input: string): string {
+  const slug = input
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')
+    .slice(0, 48);
+  return slug || 'atlas';
+}
+
+function Inline({ children }: { children: ReactNode }) {
+  return <code className="inline">{children}</code>;
+}
 
 function CodeBlock({
   path,
@@ -147,10 +229,6 @@ function Step({ num, children }: { num: number; children: ReactNode }) {
   );
 }
 
-function Inline({ children }: { children: ReactNode }) {
-  return <code className="inline">{children}</code>;
-}
-
 function Tabs<T extends string>({
   options,
   value,
@@ -177,108 +255,370 @@ function Tabs<T extends string>({
   );
 }
 
-function setupCode(shell: Shell): string {
+function envCode({
+  registration,
+  workspace,
+  client,
+  contextUrl,
+  heartbeatUrl,
+  handoffUrl,
+  messagesUrl,
+}: {
+  registration: Registration | null;
+  workspace: string;
+  client: ClientDef;
+  contextUrl: string;
+  heartbeatUrl: string;
+  handoffUrl: string;
+  messagesUrl: string;
+}): string {
+  return [
+    `NEVERZERO_API_KEY=${registration ? '<paste-the-one-time-key-shown-once-above>' : 'nz_live_<generated-by-the-bootstrap-prompt>'}`,
+    `NEVERZERO_WORKSPACE=${workspace}`,
+    `NEVERZERO_AGENT_ID=${registration?.agent.id ?? 'agt_<generated-agent-id>'}`,
+    `NEVERZERO_AGENT_NAME=${registration?.agent.name ?? `${client.name} on this device`}`,
+    `NEVERZERO_AGENT_RUNTIME=${client.runtime}`,
+    `NEVERZERO_CONTEXT_URL=${contextUrl}`,
+    `NEVERZERO_HEARTBEAT_URL=${heartbeatUrl}`,
+    `NEVERZERO_HANDOFF_URL=${handoffUrl}`,
+    `NEVERZERO_MESSAGES_URL=${messagesUrl}`,
+    'NEVERZERO_HEARTBEAT_INTERVAL_SECONDS=60',
+  ].join('\n');
+}
+
+function runtimePointer({ client }: { client: ClientDef }): string {
+  if (client.id === 'codex') {
+    return 'Codex and GStack load the repo AGENTS.md. Keep the NeverZero protocol in AGENTS.md and keep secrets in environment/local ignored config.';
+  }
+  if (client.id === 'claude-code') {
+    return 'Create or update CLAUDE.md with: "Read and follow ./AGENTS.md before doing any work. NeverZero cold-start is mandatory."';
+  }
+  if (client.id === 'claude-desktop') {
+    return 'Save the same instruction in the Claude project instructions: "Read and follow the repository AGENTS.md before doing any work."';
+  }
+  if (client.id === 'cursor') {
+    return 'Create or update .cursorrules with: "Read and follow AGENTS.md first. NeverZero cold-start is mandatory before planning or edits."';
+  }
+  if (client.id === 'vscode') {
+    return 'Create or update .github/copilot-instructions.md with: "Read and follow AGENTS.md first. NeverZero cold-start is mandatory."';
+  }
+  if (client.id === 'windsurf') {
+    return 'Create or update .windsurfrules with: "Read and follow AGENTS.md first. NeverZero cold-start is mandatory before Cascade works."';
+  }
+  if (client.id === 'aider') {
+    return 'Create or update CONVENTIONS.md with a one-line pointer to AGENTS.md, then launch Aider from a shell that loads the NeverZero env file.';
+  }
+  return `Store a durable project instruction for ${client.name}: "Read and follow AGENTS.md first. NeverZero cold-start is mandatory."`;
+}
+
+function identityJson({
+  registration,
+  client,
+  workspace,
+  machine,
+  os,
+  capabilities,
+  currentTask,
+}: {
+  registration: Registration | null;
+  client: ClientDef;
+  workspace: string;
+  machine: string;
+  os: OsChoice;
+  capabilities: string;
+  currentTask: string;
+}): string {
+  return JSON.stringify(
+    {
+      agent_id: registration?.agent.id ?? 'agt_<generated-agent-id>',
+      agent_name: registration?.agent.name ?? `${client.name} on this device`,
+      agent_from: client.id,
+      workspace,
+      runtime: client.runtime,
+      machine: machine || '<machine-label>',
+      os,
+      session_id: '<generate-a-new-id-every-session>',
+      capabilities: capabilities.split(',').map((item) => item.trim()).filter(Boolean),
+      current_task: currentTask || '<current task>',
+    },
+    null,
+    2,
+  );
+}
+
+function bootstrapPrompt({
+  registration,
+  client,
+  workspace,
+  contextUrl,
+  heartbeatUrl,
+  handoffUrl,
+  messagesUrl,
+  machine,
+  capabilities,
+  currentTask,
+}: {
+  registration: Registration | null;
+  client: ClientDef;
+  workspace: string;
+  contextUrl: string;
+  heartbeatUrl: string;
+  handoffUrl: string;
+  messagesUrl: string;
+  machine: string;
+  capabilities: string;
+  currentTask: string;
+}): string {
+  return [
+    `You are ${registration?.agent.name ?? `${client.name} on this device`}, a registered NeverZero agent in workspace "${workspace}".`,
+    `Agent id: ${registration?.agent.id ?? 'agt_<generated-agent-id>'}. Runtime: ${client.runtime}. Machine: ${machine || '<machine-label>'}.`,
+    '',
+    'Required cold-start protocol:',
+    '1. In every new session, before analysis, planning, code edits, shell commands, or answers, fetch NeverZero context.',
+    `2. GET ${contextUrl} with header: Authorization: Bearer $NEVERZERO_API_KEY.`,
+    '3. Read coldStartSummary, workspace.pinnedMemories, activeAgents, openTasks, and protocol.',
+    '4. Do not proceed from memory alone. If the context fetch fails, say "NeverZero context fetch failed" and ask whether to continue degraded.',
+    '5. This same protocol applies during first-time installation, resumed desktop sessions, CLI sessions, and IDE agent sessions.',
+    '',
+    'Heartbeat protocol:',
+    `- POST ${heartbeatUrl} every 60 seconds while active.`,
+    '- Include agent_id, runtime, machine, session_id, current_task, capabilities, project_path, and status.',
+    '- Generate a fresh session_id for each new session so NeverZero can separate this run from prior runs.',
+    `- Before stopping, POST a handoff to ${handoffUrl} when the client has that capability.`,
+    '',
+    'Agent-to-agent relay:',
+    `- GET ${messagesUrl}?agentId=${registration?.agent.id ?? 'agt_<generated-agent-id>'} with Authorization: Bearer $NEVERZERO_API_KEY to read peer packets addressed to this agent and workspace broadcasts.`,
+    `- POST ${messagesUrl} with the same Authorization header plus fromAgentId, optional toAgentId, kind, summary, context, refs, and sessionId to share context with peers.`,
+    '- Do not put secrets in relay messages.',
+    '',
+    'Identity payload to use:',
+    identityJson({
+      registration,
+      client,
+      workspace,
+      machine,
+      os: registration?.agent.platform.os ?? 'auto',
+      capabilities,
+      currentTask,
+    }),
+  ].join('\n');
+}
+
+function singleBootstrapPrompt({
+  client,
+  workspace,
+  owner,
+  agentName,
+  contextUrl,
+  heartbeatUrl,
+  messagesUrl,
+  machine,
+  os,
+  capabilities,
+  currentTask,
+}: {
+  client: ClientDef;
+  workspace: string;
+  owner: string;
+  agentName: string;
+  contextUrl: string;
+  heartbeatUrl: string;
+  messagesUrl: string;
+  machine: string;
+  os: OsChoice;
+  capabilities: string;
+  currentTask: string;
+}): string {
+  const apiBase = contextUrl.replace(/\/api\/context$/, '');
+  const capabilitiesList = capabilities.split(',').map((item) => item.trim()).filter(Boolean);
+  const capabilityLines = capabilitiesList.length
+    ? capabilitiesList.map((item, index) => (
+      `    "${item}"${index === capabilitiesList.length - 1 ? '' : ','}`
+    )).join('\n')
+    : '    "read workspace context"';
+  const osValue = os === 'auto' ? null : os;
+
+  return [
+    'You are installing NeverZero for this repository. Complete the setup yourself instead of asking the user to follow separate manual steps.',
+    '',
+    'Install inputs:',
+    `- NeverZero API base URL: ${apiBase}`,
+    `- Heartbeat URL template: ${heartbeatUrl}`,
+    `- Agent messages URL: ${messagesUrl}`,
+    `- Workspace slug: ${workspace}`,
+    `- Owner: ${owner || 'sam'}`,
+    `- Agent name: ${agentName || `${client.name} on this device`}`,
+    `- Runtime: ${client.runtime}`,
+    `- Agent source: ${client.id}`,
+    `- Machine label: ${machine || '<detect machine label>'}`,
+    `- OS: ${osValue ?? 'auto'}`,
+    `- Current task: ${currentTask || '<current task>'}`,
+    `- Capabilities: ${capabilitiesList.join(', ') || 'read workspace context'}`,
+    '',
+    'Do this in order:',
+    '1. If NEVERZERO_API_KEY and NEVERZERO_AGENT_ID are already available in the shell or secure local config, reuse that stable install identity. Otherwise register this agent.',
+    `2. Register by POSTing ${apiBase}/api/agents with Content-Type: application/json and this payload:`,
+    '{',
+    `  "name": "${agentName || `${client.name} on this device`}",`,
+    `  "from": "${client.id}",`,
+    `  "org": "${workspace}",`,
+    `  "orgSlug": "${workspace}",`,
+    `  "workspace": "${workspace}",`,
+    `  "ownedBy": "${owner || 'sam'}",`,
+    '  "platform": {',
+    `    "os": ${osValue ? `"${osValue}"` : 'null'},`,
+    `    "machine": "${machine || '<detect machine label>'}",`,
+    `    "runtime": "${client.runtime}"`,
+    '  },',
+    '  "metadata": {',
+    '    "installProtocol": "neverzero-single-prompt-bootstrap-v1",',
+    '    "coldStart": "required",',
+    '    "heartbeatIntervalSeconds": "60",',
+    `    "rulesFile": "${client.rulesFile}",`,
+    `    "pasteTarget": "${client.pasteTarget}",`,
+    `    "contextUrl": "${contextUrl}",`,
+    `    "messagesUrl": "${messagesUrl}",`,
+    `    "currentTask": "${currentTask || '<current task>'}",`,
+    `    "capabilities": "${capabilitiesList.join(', ')}"`,
+    '  }',
+    '}',
+    '',
+    '3. Capture response.agent.id as NEVERZERO_AGENT_ID and response.apiKey as NEVERZERO_API_KEY. The full key is shown only once; never write it to AGENTS.md, source files, memory docs, commits, logs, screenshots, or chat memory.',
+    '4. Store secrets in a local secure config or an ignored env file such as .neverzero.local.env. Ensure .gitignore contains .neverzero.local.env and .env.neverzero.local before writing either file.',
+    '5. The local env file should contain only local runtime config like this:',
+    'NEVERZERO_API_KEY=<one-time-key-from-registration>',
+    `NEVERZERO_WORKSPACE=${workspace}`,
+    'NEVERZERO_AGENT_ID=<agent-id-from-registration>',
+    `NEVERZERO_AGENT_NAME=${agentName || `${client.name} on this device`}`,
+    `NEVERZERO_AGENT_RUNTIME=${client.runtime}`,
+    `NEVERZERO_CONTEXT_URL=${contextUrl}`,
+    'NEVERZERO_HEARTBEAT_URL=<api-base>/api/agents/<agent-id-from-registration>/heartbeat',
+    'NEVERZERO_HANDOFF_URL=<api-base>/api/agents/<agent-id-from-registration>/handoff',
+    `NEVERZERO_MESSAGES_URL=${messagesUrl}`,
+    'NEVERZERO_HEARTBEAT_INTERVAL_SECONDS=60',
+    '',
+    '6. Create or update AGENTS.md with this secret-free protocol block. Preserve existing AGENTS.md instructions and put this near the top:',
+    '```md',
+    '## NeverZero Cold Start Protocol',
+    '',
+    'This repository uses NeverZero as the shared workspace memory. Do not start from chat memory alone.',
+    '',
+    'Required first action in every new agent session:',
+    '1. Before analysis, planning, code edits, shell commands, or answers, fetch NeverZero context.',
+    '2. Read NEVERZERO_API_KEY and NEVERZERO_AGENT_ID from the shell, secure local config, or an ignored local env file. Never read the key from AGENTS.md.',
+    '3. GET $NEVERZERO_CONTEXT_URL with header: Authorization: Bearer $NEVERZERO_API_KEY.',
+    '4. Read coldStartSummary, workspace.pinnedMemories, activeAgents, openTasks, blockers, handoffs, decisions, ledger.recentEvents, and protocol.',
+    '5. If the context fetch fails, stop and say: NeverZero context fetch failed. Then ask whether to continue in degraded mode.',
+    '',
+    'Heartbeat while active:',
+    '- Generate a fresh session_id for every new session.',
+    '- POST $NEVERZERO_HEARTBEAT_URL every $NEVERZERO_HEARTBEAT_INTERVAL_SECONDS seconds while active.',
+    '- Include agent_id, agent_name, agent_from, runtime, machine, os, session_id, current_task, capabilities, project_path, status, and parent_agent_id when applicable.',
+    '- Register subagents separately and include parent_agent_id in their metadata or heartbeat.',
+    '',
+    'Agent-to-agent context relay:',
+    '- Use $NEVERZERO_MESSAGES_URL for live peer context when a full cold-start fetch is unnecessary.',
+    '- GET $NEVERZERO_MESSAGES_URL?agentId=$NEVERZERO_AGENT_ID with header Authorization: Bearer $NEVERZERO_API_KEY to read messages addressed to this agent plus workspace broadcasts.',
+    '- POST $NEVERZERO_MESSAGES_URL with the same Authorization header plus fromAgentId, optional toAgentId, kind, summary, context, refs, and sessionId to share context, decisions, questions, or handoffs with peers.',
+    '- Never include secrets in relay messages; share only context, blockers, decisions, file refs, and handoff pointers.',
+    '',
+    'Before exit:',
+    '- POST $NEVERZERO_HANDOFF_URL when supported with Goal, Current state, Completed work, Open blockers, Files touched, Decisions made, and Next action.',
+    '',
+    'Security:',
+    '- The full NEVERZERO_API_KEY must never be written to AGENTS.md, committed files, repo memory, or agent-visible shared docs.',
+    '- Only the key prefix may appear in UI lists or shared summaries.',
+    '```',
+    '',
+    `7. Add this runtime pointer if ${client.name} does not automatically load AGENTS.md: ${runtimePointer({ client })}`,
+    '8. Generate a fresh session_id for this run. Then immediately cold-start by GETting $NEVERZERO_CONTEXT_URL with Authorization: Bearer $NEVERZERO_API_KEY.',
+    '9. POST the first heartbeat to $NEVERZERO_HEARTBEAT_URL with this identity shape:',
+    '{',
+    '  "agent_id": "$NEVERZERO_AGENT_ID",',
+    `  "agent_name": "${agentName || `${client.name} on this device`}",`,
+    `  "agent_from": "${client.id}",`,
+    `  "workspace": "${workspace}",`,
+    `  "runtime": "${client.runtime}",`,
+    `  "machine": "${machine || '<detect machine label>'}",`,
+    `  "os": "${osValue ?? 'auto'}",`,
+    '  "session_id": "<fresh-session-id>",',
+    '  "capabilities": [',
+    capabilityLines,
+    '  ],',
+    `  "current_task": "${currentTask || '<current task>'}",`,
+    '  "project_path": "<absolute repo path>",',
+    '  "status": "working"',
+    '}',
+    '',
+    `10. Tell the user setup is complete and point them to ${apiBase}/${workspace}/agents to verify the active agent. If you generated a new key, show the full key once only after it has been saved locally.`,
+  ].join('\n');
+}
+
+function smokeTestCode({
+  shell,
+  contextUrl,
+  heartbeatUrl,
+  messagesUrl,
+  client,
+  machine,
+  capabilities,
+  currentTask,
+}: {
+  shell: Shell;
+  contextUrl: string;
+  heartbeatUrl: string;
+  messagesUrl: string;
+  client: ClientDef;
+  machine: string;
+  capabilities: string;
+  currentTask: string;
+}): string {
   if (shell === 'powershell') {
     return [
-      '# Run from this repository root',
-      'pnpm --dir cli install',
-      'pnpm --dir cli run build',
+      '$headers = @{ Authorization = "Bearer $env:NEVERZERO_API_KEY" }',
+      `Invoke-RestMethod -Uri "${contextUrl}" -Headers $headers`,
       '',
-      '# Keep this shell pointed at the built CLI',
-      '$env:NZ_CLI = (Resolve-Path .\\cli\\dist\\index.js).Path',
-      'node $env:NZ_CLI --version',
-    ].join('\n');
-  }
-
-  return [
-    '# Run from this repository root',
-    'pnpm --dir cli install',
-    'pnpm --dir cli run build',
-    '',
-    '# Keep this shell pointed at the built CLI',
-    'export NZ_CLI="$(pwd)/cli/dist/index.js"',
-    'node "$NZ_CLI" --version',
-  ].join('\n');
-}
-
-function initCode(shell: Shell): string {
-  if (shell === 'powershell') {
-    return [
-      '# Run in the project you want agents to share',
-      'mkdir $env:TEMP\\nz-demo -Force | Out-Null',
-      'cd $env:TEMP\\nz-demo',
-      'node $env:NZ_CLI init',
+      '$sessionId = [guid]::NewGuid().ToString()',
+      '$body = @{',
+      '  agent_id = $env:NEVERZERO_AGENT_ID',
+      '  agent_name = $env:NEVERZERO_AGENT_NAME',
+      `  agent_from = "${client.id}"`,
+      '  sessionId = $sessionId',
+      `  runtime = "${client.runtime}"`,
+      `  machine = "${machine || 'this-device'}"`,
+      `  currentTask = "${currentTask || 'connect NeverZero'}"`,
+      `  capabilities = @(${capabilities.split(',').map((item) => `"${item.trim()}"`).filter((item) => item !== '""').join(', ') || '"context"'})`,
+      '  projectPath = (Get-Location).Path',
+      '  status = "working"',
+      '} | ConvertTo-Json',
+      `Invoke-RestMethod -Method Post -Uri "${heartbeatUrl}" -Headers $headers -ContentType "application/json" -Body $body`,
       '',
-      '# The local state contract should now exist',
-      'Get-ChildItem .nz',
+      '$message = @{',
+      '  fromAgentId = $env:NEVERZERO_AGENT_ID',
+      '  kind = "context"',
+      '  summary = "Smoke test peer context packet"',
+      '  context = "This agent can share context through NeverZero without refetching the full cold-start payload."',
+      '  refs = @($env:NEVERZERO_CONTEXT_URL)',
+      '  sessionId = $sessionId',
+      '} | ConvertTo-Json',
+      `Invoke-RestMethod -Method Post -Uri "${messagesUrl}" -Headers $headers -ContentType "application/json" -Body $message`,
     ].join('\n');
   }
 
   return [
-    '# Run in the project you want agents to share',
-    'mkdir -p /tmp/nz-demo',
-    'cd /tmp/nz-demo',
-    'node "$NZ_CLI" init',
+    'SESSION_ID="$(date +%s)-$RANDOM"',
+    `curl -sS "${contextUrl}" \\`,
+    '  -H "Authorization: Bearer $NEVERZERO_API_KEY"',
     '',
-    '# The local state contract should now exist',
-    'ls -la .nz',
-  ].join('\n');
-}
-
-function joinCode(shell: Shell, client: ClientDef): string {
-  if (shell === 'powershell') {
-    return [
-      `$agentName = "${client.name}"`,
-      `node $env:NZ_CLI join --name $agentName --runtime ${client.runtime} --machine $env:COMPUTERNAME`,
-      '$room = Get-Content -Raw .nz\\room.json | ConvertFrom-Json',
-      '$agent = ($room.agents | Where-Object { $_.name -eq $agentName } | Select-Object -Last 1).id',
-      'node $env:NZ_CLI status',
-    ].join('\n');
-  }
-
-  return [
-    `AGENT_NAME="${client.name}"`,
-    `node "$NZ_CLI" join --name "$AGENT_NAME" --runtime ${client.runtime} --machine "$(hostname)"`,
-    'AGENT=$(node -e "const name=process.argv[1]; const r=require(\'./.nz/room.json\'); const a=[...r.agents].reverse().find((x)=>x.name===name); if(!a) process.exit(1); console.log(a.id)" "$AGENT_NAME")',
-    'node "$NZ_CLI" status',
-  ].join('\n');
-}
-
-function handoffCode(shell: Shell): string {
-  if (shell === 'powershell') {
-    return [
-      'node $env:NZ_CLI claim --agent $agent --task "connect shared context"',
-      'node $env:NZ_CLI log --agent $agent --type decision --summary "Use local-first .nz state"',
-      'node $env:NZ_CLI handoff --agent $agent',
-      'node $env:NZ_CLI resume',
-      'node $env:NZ_CLI status',
-    ].join('\n');
-  }
-
-  return [
-    'node "$NZ_CLI" claim --agent "$AGENT" --task "connect shared context"',
-    'node "$NZ_CLI" log --agent "$AGENT" --type decision --summary "Use local-first .nz state"',
-    'node "$NZ_CLI" handoff --agent "$AGENT"',
-    'node "$NZ_CLI" resume',
-    'node "$NZ_CLI" status',
-  ].join('\n');
-}
-
-function rulesCode(shell: Shell, client: ClientDef): string {
-  const nz = shell === 'powershell' ? 'node $env:NZ_CLI' : 'node "$NZ_CLI"';
-  return [
-    '# NeverZero local context',
+    `curl -sS -X POST "${heartbeatUrl}" \\`,
+    '  -H "Authorization: Bearer $NEVERZERO_API_KEY" \\',
+    '  -H "Content-Type: application/json" \\',
+    `  -d '{"agent_id":"'"$NEVERZERO_AGENT_ID"'","agent_name":"'"$NEVERZERO_AGENT_NAME"'","agent_from":"${client.id}","sessionId":"'"$SESSION_ID"'","runtime":"${client.runtime}","machine":"${machine || 'this-device'}","currentTask":"${currentTask || 'connect NeverZero'}","capabilities":[${capabilities.split(',').map((item) => `"${item.trim()}"`).filter((item) => item !== '""').join(', ') || '"context"'}],"projectPath":"'"$PWD"'","status":"working"}'`,
     '',
-    `This project uses the local .nz room. Runtime name: ${client.runtime}.`,
-    '',
-    `At task start, run: ${nz} status`,
-    `Before claiming work, run: ${nz} conflict-check --task "<task name>"`,
-    `When taking work, run: ${nz} claim --agent <agent-id> --task "<task name>"`,
-    `When a decision is made, run: ${nz} log --agent <agent-id> --type decision --summary "<decision>"`,
-    `Before stopping, run: ${nz} handoff --agent <agent-id>`,
-    '',
-    'Treat .nz/room.json, .nz/ledger.ndjson, .nz/memory.json, and',
-    '.nz/handoff/latest.nzr.json as the shared context contract.',
+    `curl -sS -X POST "${messagesUrl}" \\`,
+    '  -H "Authorization: Bearer $NEVERZERO_API_KEY" \\',
+    '  -H "Content-Type: application/json" \\',
+    `  -d '{"fromAgentId":"'"$NEVERZERO_AGENT_ID"'","kind":"context","summary":"Smoke test peer context packet","context":"This agent can share context through NeverZero without refetching the full cold-start payload.","refs":["'"$NEVERZERO_CONTEXT_URL"'"],"sessionId":"'"$SESSION_ID"'"}'`,
   ].join('\n');
 }
 
@@ -289,19 +629,140 @@ export type InstallAppProps = {
 function InstallPageInner({ orgSlug }: InstallAppProps) {
   const params = useSearchParams();
   const fromBrain = params.get('from') === 'brain';
+  const [origin, setOrigin] = useState('http://localhost:3000');
   const [shell, setShell] = useState<Shell>('powershell');
   const [clientId, setClientId] = useState<ClientId>('codex');
-  const workspaceLabel = orgSlug ?? 'local demo';
+  const [workspace, setWorkspace] = useState(orgSlug ?? 'atlas');
+  const [agentName, setAgentName] = useState('Codex / GStack on this device');
+  const [machine, setMachine] = useState('');
+  const [os, setOs] = useState<OsChoice>('auto');
+  const [owner, setOwner] = useState('sam');
+  const [capabilities, setCapabilities] = useState('read workspace context, edit code, run tests, write handoffs');
+  const [currentTask, setCurrentTask] = useState('connect NeverZero cold start and heartbeat');
+  const [registration, setRegistration] = useState<Registration | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setOrigin(window.location.origin);
+    setMachine((existing) => existing || window.navigator.platform || 'this-device');
+  }, []);
+
+  useEffect(() => {
+    if (orgSlug) setWorkspace(orgSlug);
+  }, [orgSlug]);
+
   const selectedClient = useMemo(
     () => CLIENTS.find((c) => c.id === clientId) ?? CLIENTS[0],
     [clientId],
   );
+  const workspaceSlug = cleanSlug(workspace);
+  const basePath = orgSlug ? `/${orgSlug}` : '';
+  const agentsHref = orgSlug ? `/${orgSlug}/agents` : '/agents';
+  const workstationHref = orgSlug ? `/${orgSlug}/workstation` : '/workstation';
+  const contextUrl = `${origin}/api/context`;
+  const heartbeatUrl = `${origin}/api/agents/${registration?.agent.id ?? '<agent-id>'}/heartbeat`;
+  const handoffUrl = `${origin}/api/agents/${registration?.agent.id ?? '<agent-id>'}/handoff`;
+  const messagesUrl = `${origin}/api/orgs/${workspaceSlug}/agent-messages`;
+
+  async function registerAgent(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setSubmitting(true);
+    setError(null);
+    setRegistration(null);
+
+    try {
+      const res = await fetch('/api/agents', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: agentName.trim(),
+          from: selectedClient.id,
+          org: workspaceSlug,
+          orgSlug: workspaceSlug,
+          workspace: workspaceSlug,
+          ownedBy: owner.trim() || 'sam',
+          platform: {
+            os: os === 'auto' ? null : os,
+            machine: machine.trim() || null,
+            runtime: selectedClient.runtime,
+          },
+          metadata: {
+            installProtocol: 'neverzero-single-prompt-bootstrap-v1',
+            coldStart: 'required',
+            heartbeatIntervalSeconds: '60',
+            rulesFile: selectedClient.rulesFile,
+            pasteTarget: selectedClient.pasteTarget,
+            contextUrl,
+            messagesUrl,
+            currentTask,
+            capabilities,
+          },
+        }),
+      });
+      const data = (await res.json()) as Registration | { error: string };
+      if (!res.ok || !('agent' in data)) {
+        setError('error' in data ? data.error : 'Failed to register agent.');
+        return;
+      }
+      setRegistration(data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Network error while registering agent.');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  const configCode = envCode({
+    registration,
+    workspace: workspaceSlug,
+    client: selectedClient,
+    contextUrl,
+    heartbeatUrl,
+    handoffUrl,
+    messagesUrl,
+  });
+  const promptCode = bootstrapPrompt({
+    registration,
+    client: selectedClient,
+    workspace: workspaceSlug,
+    contextUrl,
+    heartbeatUrl,
+    handoffUrl,
+    messagesUrl,
+    machine,
+    capabilities,
+    currentTask,
+  });
+  const identityCode = identityJson({
+    registration,
+    client: selectedClient,
+    workspace: workspaceSlug,
+    machine,
+    os,
+    capabilities,
+    currentTask,
+  });
+  const singlePromptCode = singleBootstrapPrompt({
+    client: selectedClient,
+    workspace: workspaceSlug,
+    owner,
+    agentName,
+    contextUrl,
+    heartbeatUrl,
+    messagesUrl,
+    machine,
+    os,
+    capabilities,
+    currentTask,
+  }).replaceAll('<api-base>/api/agents/<agent-id-from-registration>/heartbeat', `${origin}/api/agents/<agent-id-from-registration>/heartbeat`)
+    .replaceAll('<api-base>/api/agents/<agent-id-from-registration>/handoff', `${origin}/api/agents/<agent-id-from-registration>/handoff`);
 
   return (
     <div className="install-root">
       <nav className="nav">
         <div className="nav-inner">
-          <Link className="brand" href="/">
+          <Link className="brand" href={basePath || '/'}>
             <span className="logo" />
             <span className="name">NeverZero<span className="sm">Cloud</span></span>
           </Link>
@@ -311,36 +772,36 @@ function InstallPageInner({ orgSlug }: InstallAppProps) {
             <span className="cur">Install</span>
           </div>
           <div className="nav-right">
-            <span className="ver">{workspaceLabel}</span>
-            <Link className="txt" href="/workstation">Workstation</Link>
-            <Link className="txt" href="/agents">Agents</Link>
+            <span className="ver">{workspaceSlug}</span>
+            <Link className="txt" href={workstationHref}>Workstation</Link>
+            <Link className="txt" href={agentsHref}>Agents</Link>
           </div>
         </div>
       </nav>
 
       <section className="hero">
-        <div className="eyebrow">DOCS / INSTALL / LOCAL-FIRST CLI</div>
+        <div className="eyebrow">DOCS / INSTALL / NO-AMNESIA BOOTSTRAP</div>
         <h1>
-          Install the shared<br />
-          <span className="muted">agent context room.</span>
+          Install the prompt<br />
+          <span className="muted">that makes agents remember.</span>
         </h1>
         <p className="lede">
-          This hackathon build works through the local <b>nz</b> CLI and a plain <b>.nz/</b>
-          directory beside your code. No cloud key, MCP package, database, or hosted API is
-          required for the working path.
+          Paste one bootstrap prompt into the selected agent or IDE. It registers the runtime,
+          stores the key locally, updates repo instructions, fetches cold-start context, and
+          posts the first heartbeat without making the user walk through five separate steps.
         </p>
         <div className="hero-stat-row">
-          <span className="item"><b>0</b> network calls</span>
-          <span className="item"><b>4</b> local files</span>
-          <span className="item"><b>10</b> CLI commands</span>
-          <span className="item">Works on <b>Windows / macOS / Linux / WSL</b></span>
+          <span className="item"><b>1</b> pasteable bootstrap prompt</span>
+          <span className="item"><b>1</b> cold-start context fetch</span>
+          <span className="item"><b>60s</b> heartbeat cadence</span>
+          <span className="item">Works with <b>Codex, Claude, Cursor, VS Code, Windsurf</b></span>
         </div>
       </section>
 
       <section className="section">
         <h2>
           Pick your runtime
-          <span className="count">/ command snippets adapt below</span>
+          <span className="count">/ prompt and identity adapt below</span>
         </h2>
         <div className="client-grid">
           {CLIENTS.map((c) => (
@@ -348,13 +809,18 @@ function InstallPageInner({ orgSlug }: InstallAppProps) {
               key={c.id}
               className="client"
               data-on={clientId === c.id ? '1' : '0'}
-              onClick={() => setClientId(c.id)}
+              onClick={() => {
+                setClientId(c.id);
+                setAgentName(`${c.name} on this device`);
+                setRegistration(null);
+                setError(null);
+              }}
               type="button"
             >
               <span className="glyph">{c.glyph}</span>
               <span className="name">{c.name}</span>
               <span className="meta">{c.meta}</span>
-              {c.id === 'codex' && <span className="stat">recommended</span>}
+              {c.recommended && <span className="stat">recommended</span>}
             </button>
           ))}
         </div>
@@ -365,18 +831,126 @@ function InstallPageInner({ orgSlug }: InstallAppProps) {
           <div className="onboard-banner" style={{ marginBottom: 16 }}>
             <span className="num">1</span>
             <div className="txt">
-              <b>Brain draft complete.</b> The next working step is creating the local .nz room
-              and joining your first agent runtime.
+              <b>Workspace created.</b> Paste the single bootstrap prompt into the first agent so
+              future sessions start from NeverZero context and can relay peer packets.
             </div>
-            <Link className="skip" href="/workstation">skip to workstation</Link>
+            <Link className="skip" href={workstationHref}>open workspace</Link>
           </div>
         )}
 
         <Step num={1}>
-          <h3>Build the local CLI</h3>
+          <h3>Copy the single bootstrap prompt</h3>
           <p className="lede">
-            The repo-local CLI is the source of truth today. Build it once, then run it from any
-            project directory with <Inline>node $NZ_CLI</Inline>.
+            Paste this into {selectedClient.name}. The agent will register itself, save the key
+            outside the repo, update AGENTS.md with the cold-start protocol, create any runtime
+            pointer file it needs, fetch context, post the first heartbeat, and verify peer relay.
+          </p>
+          <CodeBlock
+            path={`${selectedClient.name} one-prompt installer`}
+            id="single-bootstrap-prompt"
+            code={singlePromptCode}
+          />
+          <div className="identity-grid">
+            <div><b>register</b><span>POST /api/agents if no stable install exists.</span></div>
+            <div><b>secure config</b><span>Store the full key only in env or ignored local config.</span></div>
+            <div><b>AGENTS.md</b><span>Add the secret-free cold-start and heartbeat protocol.</span></div>
+            <div><b>verify</b><span>Fetch context, heartbeat, then appear active in the registry.</span></div>
+          </div>
+        </Step>
+
+        <Step num={2}>
+          <h3>Optional browser-generated key</h3>
+          <p className="lede">
+            Use this if you want the page to mint the key instead of letting the agent do it.
+            The full key appears once in the green box; generated config below uses a placeholder.
+          </p>
+          <form className="bootstrap-form" onSubmit={registerAgent}>
+            <div className="field-row">
+              <label className="field">
+                <span>Workspace slug</span>
+                <input value={workspace} onChange={(e) => setWorkspace(e.target.value)} />
+              </label>
+              <label className="field">
+                <span>Owner</span>
+                <input value={owner} onChange={(e) => setOwner(e.target.value)} />
+              </label>
+            </div>
+            <label className="field">
+              <span>Agent name</span>
+              <input
+                value={agentName}
+                onChange={(e) => setAgentName(e.target.value)}
+                maxLength={80}
+                required
+              />
+            </label>
+            <div className="field-row">
+              <label className="field">
+                <span>Machine label</span>
+                <input value={machine} onChange={(e) => setMachine(e.target.value)} />
+              </label>
+              <label className="field">
+                <span>OS</span>
+                <select value={os} onChange={(e) => setOs(e.target.value as OsChoice)}>
+                  <option value="auto">Auto</option>
+                  <option value="mac">macOS</option>
+                  <option value="win">Windows</option>
+                  <option value="linux">Linux</option>
+                  <option value="wsl">WSL</option>
+                </select>
+              </label>
+            </div>
+            <label className="field">
+              <span>Capabilities</span>
+              <textarea value={capabilities} onChange={(e) => setCapabilities(e.target.value)} rows={2} />
+            </label>
+            <label className="field">
+              <span>Current task differentiator</span>
+              <input value={currentTask} onChange={(e) => setCurrentTask(e.target.value)} />
+            </label>
+
+            {error && <div className="form-error">{error}</div>}
+
+            <div className="form-actions">
+              <button className="primary-action" type="submit" disabled={submitting || !agentName.trim()}>
+                {submitting ? 'Generating key...' : `Generate optional key for ${selectedClient.name}`}
+              </button>
+              <span className="action-hint">
+                POST <Inline>/api/agents</Inline> with runtime, machine, workspace identity, and bootstrap metadata.
+              </span>
+            </div>
+          </form>
+
+          {registration && (
+            <div className="key-card">
+              <div>
+                <div className="key-eyebrow">Key generated once / {registration.agent.id}</div>
+                <h4>{registration.agent.name}</h4>
+                <p>
+                  Save the full key now in local secure config. Later screens only show prefix{' '}
+                  <Inline>{registration.agent.apiKeyPrefix}</Inline>.
+                </p>
+              </div>
+              <code>{registration.apiKey}</code>
+            </div>
+          )}
+
+          <div className="artifact-stack">
+            <CodeBlock path={`${selectedClient.name} secure env template`} id="neverzero-env" code={configCode} />
+            <CodeBlock path={`${selectedClient.rulesFile} protocol preview`} id="bootstrap-prompt" code={promptCode} />
+          </div>
+          <CodeBlock path="heartbeat identity JSON" id="identity-json" code={identityCode} />
+          <div className="note">
+            {selectedClient.note} {runtimePointer({ client: selectedClient })}
+          </div>
+        </Step>
+
+        <Step num={3}>
+          <h3>Smoke test context, heartbeat, and relay</h3>
+          <p className="lede">
+            A working install fetches <Inline>/api/context</Inline> with the key, posts to the
+            agent-specific heartbeat URL, sends one peer context packet, and records the events
+            in the workspace ledger.
           </p>
           <Tabs
             value={shell}
@@ -386,113 +960,77 @@ function InstallPageInner({ orgSlug }: InstallAppProps) {
               { id: 'bash', label: 'macOS / Linux / WSL' },
             ]}
           />
-          <CodeBlock path="terminal" id="setup-cli" code={setupCode(shell)} />
-          <div className="note">
-            The install path deliberately uses <Inline>cli/dist/index.js</Inline> instead of
-            unpublished package names. It is the command path verified in this repo.
-          </div>
-        </Step>
-
-        <Step num={2}>
-          <h3>Initialize the shared room</h3>
-          <p className="lede">
-            Run this inside the repo or fixture directory you want agents to coordinate in.
-            It creates the local state contract used by the workstation and handoff flow.
-          </p>
-          <CodeBlock path="target project" id="init-room" code={initCode(shell)} />
           <CodeBlock
-            path=".nz/"
-            id="state-contract"
-            code={[
-              '.nz/',
-              '  room.json',
-              '  ledger.ndjson',
-              '  memory.json',
-              '  handoff/',
-              '    latest.nzr.json',
-            ].join('\n')}
-          />
-        </Step>
-
-        <Step num={3}>
-          <h3>Join {selectedClient.name}</h3>
-          <p className="lede">
-            This registers the current runtime as an agent in <Inline>.nz/room.json</Inline>.
-            Use runtime <Inline>{selectedClient.runtime}</Inline> for this selected client.
-          </p>
-          <CodeBlock
-            path={`${selectedClient.name} terminal`}
-            id="join-runtime"
-            code={joinCode(shell, selectedClient)}
-          />
-          <div className="note">
-            {selectedClient.note}
-          </div>
-        </Step>
-
-        <Step num={4}>
-          <h3>Prove the handoff loop</h3>
-          <p className="lede">
-            A working install is not just a rendered page. It should claim work, write a decision,
-            create a resume packet, read it back, and show the room status.
-          </p>
-          <CodeBlock path="target project" id="handoff-loop" code={handoffCode(shell)} />
-        </Step>
-
-        <Step num={5}>
-          <h3>Pin the rule in {selectedClient.rulesFile}</h3>
-          <p className="lede">
-            Add a short instruction to the client&apos;s project rules so the agent keeps using
-            the room instead of relying on memory from the current chat.
-          </p>
-          <CodeBlock
-            path={selectedClient.rulesFile}
-            id="agent-rules"
-            code={rulesCode(shell, selectedClient)}
+            path="terminal smoke test"
+            id="smoke-test"
+            code={smokeTestCode({
+              shell,
+              contextUrl,
+              heartbeatUrl,
+              messagesUrl,
+              client: selectedClient,
+              machine,
+              capabilities,
+              currentTask,
+            })}
           />
         </Step>
       </section>
 
       <section className="capabilities">
-        <h2>What this enables now</h2>
+        <h2>What the agent must do every time</h2>
         <div className="grid">
           <div className="cap">
-            <div className="h">PRESENCE</div>
-            <h4>Agents join one room.</h4>
+            <div className="h">COLD START</div>
+            <h4>Fetch context first.</h4>
             <p>
-              Each runtime writes its name, machine, status, active task, and heartbeat to the
-              same local room file.
+              New sessions call <Inline>/api/context</Inline> before analysis or edits, so they
+              start with workspace memory instead of an empty chat.
             </p>
             <div className="tools">
-              <span className="tool">nz init</span>
-              <span className="tool">nz join</span>
-              <span className="tool">nz status</span>
+              <span className="tool">Authorization header</span>
+              <span className="tool">coldStartSummary</span>
+              <span className="tool">pinned memories</span>
             </div>
           </div>
           <div className="cap">
-            <div className="h">WORK LEDGER</div>
-            <h4>Decisions become state.</h4>
+            <div className="h">HEARTBEAT</div>
+            <h4>Stay visible while working.</h4>
             <p>
-              Claims, releases, failures, and decisions append to ledger.ndjson. Decision events
-              also update memory.json.
+              Agents post identity, session id, current task, and capabilities every minute so
+              peers can see who is active and what they are doing. Between cold starts, agents
+              use the message relay to share context packets without reloading the full workspace.
             </p>
             <div className="tools">
-              <span className="tool">nz claim</span>
-              <span className="tool">nz log</span>
-              <span className="tool">nz memory show</span>
+              <span className="tool">session_id</span>
+              <span className="tool">current_task</span>
+              <span className="tool">lastSeenAt</span>
             </div>
           </div>
           <div className="cap">
-            <div className="h">RESUME</div>
-            <h4>Context survives the chat.</h4>
+            <div className="h">HANDOFF</div>
+            <h4>Leave resumable state.</h4>
             <p>
-              Handoff packets summarize current work, open tasks, recent decisions, and the next
-              best action for the next agent.
+              Before stopping, the prompt tells each client to write decisions or handoffs when
+              that runtime has a tool for it.
             </p>
             <div className="tools">
-              <span className="tool">nz handoff</span>
-              <span className="tool">nz resume</span>
-              <span className="tool">latest.nzr.json</span>
+              <span className="tool">decisions</span>
+              <span className="tool">handoff</span>
+              <span className="tool">workspace memory</span>
+            </div>
+          </div>
+          <div className="cap">
+            <div className="h">RELAY</div>
+            <h4>Share context between peers.</h4>
+            <p>
+              Agents post compact context packets to <Inline>/api/orgs/[slug]/agent-messages</Inline>
+              so other agents can pick up decisions, blockers, and file refs while work is active.
+            </p>
+            <div className="tools">
+              <span className="tool">agent messages</span>
+              <span className="tool">workspace broadcast</span>
+              <span className="tool">ledger event</span>
             </div>
           </div>
         </div>
@@ -501,51 +1039,41 @@ function InstallPageInner({ orgSlug }: InstallAppProps) {
       <section className="tshoot" id="troubleshoot">
         <h2>Troubleshooting</h2>
         <details>
-          <summary>I see older hosted-package install notes elsewhere</summary>
+          <summary>The agent starts without context</summary>
           <div className="ds-body">
-            Ignore those for this hackathon build. The verified path is the local CLI in
-            <Inline>cli/dist/index.js</Inline>. Hosted MCP, package publishing, and cloud-key
-            commands are future surfaces, not working install steps in this repo.
+            Put the bootstrap prompt in the client&apos;s durable project instruction file, not only
+            the current chat. For {selectedClient.name}, use <Inline>{selectedClient.pasteTarget}</Inline>.
           </div>
         </details>
         <details>
-          <summary>node cannot find cli/dist/index.js</summary>
+          <summary>The context request returns 401</summary>
           <div className="ds-body">
-            Re-run <Inline>pnpm --dir cli run build</Inline> from the repository root, then reset
-            <Inline>NZ_CLI</Inline> with the Step 1 command for your shell.
+            Confirm the request includes <Inline>Authorization: Bearer $NEVERZERO_API_KEY</Inline>
+            and that the full one-time key was saved before leaving this page.
           </div>
         </details>
         <details>
-          <summary>nz says the room is not initialized</summary>
+          <summary>The heartbeat returns 403</summary>
           <div className="ds-body">
-            You are probably in the wrong directory. Change into the target project and run
-            <Inline>node $NZ_CLI init</Inline> before <Inline>join</Inline>, <Inline>claim</Inline>,
-            <Inline>handoff</Inline>, or <Inline>resume</Inline>.
+            The key belongs to a different agent id. Generate a new key or use the heartbeat URL
+            created for the same <Inline>NEVERZERO_AGENT_ID</Inline>.
           </div>
         </details>
         <details>
-          <summary>Unknown agent when claiming work</summary>
+          <summary>How is this different from the old register modal?</summary>
           <div className="ds-body">
-            Re-read the agent id from <Inline>.nz/room.json</Inline> or run <Inline>node $NZ_CLI status</Inline>.
-            The id printed by <Inline>nz join</Inline> is the value required by claim, log, and handoff.
-          </div>
-        </details>
-        <details>
-          <summary>Where does GBrain fit?</summary>
-          <div className="ds-body">
-            GBrain is the likely indexed memory backend later. Today the local contract comes first:
-            keep <Inline>.nz/memory.json</Inline> and <Inline>.nz/handoff/latest.nzr.json</Inline>
-            working, then an adapter can index those files.
+            The old modal only minted a key. This page gives the key plus the durable prompt,
+            identity payload, context URL, heartbeat URL, and smoke test needed to prevent amnesia.
           </div>
         </details>
       </section>
 
       <section className="support">
         <div className="row">
-          <span>Need a second surface?</span>
+          <span>Next surface</span>
           <span className="grow" />
-          <Link href="/workstation">Open workstation</Link>
-          <Link href="/agents">Manage demo agents</Link>
+          <Link href={agentsHref}>View registered agents</Link>
+          <Link href={workstationHref}>Open workspace</Link>
           <Link href="/docs/install">Canonical docs URL</Link>
         </div>
       </section>

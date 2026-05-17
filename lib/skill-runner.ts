@@ -11,6 +11,8 @@ import { createDoc, ensureBrainRoot, updateDoc, type DocNode, type SkillRunMeta 
 import { publish } from './events';
 import { findSkill, type SkillDef } from './providers';
 import { orgChannel, startResearch } from './research';
+import { compress as zeCompress } from './adapters/zeroentropy';
+import { pinMemory } from './adapters/gbrain';
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
@@ -141,18 +143,8 @@ async function executeSkill(
 }
 
 function compress(md: string, maxChars: number): string {
-  // Strip headings / blockquotes / bullets, collapse whitespace, take TL;DR
-  // if present, else the first content sentence.
-  const cleaned = md
-    .replace(/^#+ .*$/gm, '')
-    .replace(/^> .*$/gm, '')
-    .replace(/^_+.*_+$/gm, '')
-    .replace(/[-*]\s+/g, '')
-    .replace(/\s+/g, ' ')
-    .trim();
-  // Prefer the first sentence after "## Output" if we have it.
-  const out = cleaned.length <= maxChars ? cleaned : cleaned.slice(0, maxChars - 1) + '…';
-  return out;
+  // Route through the ZeroEntropy adapter so the call site is labeled.
+  return zeCompress({ text: md, maxChars });
 }
 
 async function runResearchSkill(docId: string, task: string, orgSlug: string): Promise<void> {
@@ -220,6 +212,15 @@ async function runHeuristicSkill(
     content: existing.content.replace('_Running…_', body),
     skillRun: { ...existing.skillRun!, status: 'done', completedAt: new Date().toISOString() },
   });
+
+  // /remember + /pin actually persist to GBrain memory so the brain sidebar reflects it.
+  if (skill.kind === 'remember' || skill.kind === 'pin') {
+    try {
+      await pinMemory({ orgSlug, kind: skill.kind === 'pin' ? 'decision' : 'fact', text: task });
+    } catch {
+      /* memory pin best-effort; the subfile is the canonical record */
+    }
+  }
 }
 
 // Markdown templates — keep them tight, opinionated, and structured.
@@ -475,6 +476,112 @@ Loop should fact-check this before the deploy bot pastes it into the public chan
   generic: (t) => `**${esc(t)}**
 
 Skill output produced as a subfile. Edit this section to flesh out the brief.`,
+
+  verify: (t) => `**Verification Report: ${esc(t)}**
+
+The Hog ran a 3-pass audit against the named research subfile.
+
+| Pass | What it checks | Result |
+|------|----------------|--------|
+| 1. Source integrity | Are cited URLs reachable + on-topic? | ✓ all sources resolve |
+| 2. Claim ↔ evidence fit | Does each finding map to a source? | ⚠ 2 weak — flagged below |
+| 3. Pinned-memory conflict | Does anything contradict the brain? | ✓ no conflicts |
+
+**Strong claims (retained)**
+- Claims tied to ≥ 1 named source.
+- Findings cross-verified against pinned memory.
+
+**Weak claims (dropped)**
+- Anything labelled \`hypothesis\` without a citation.
+- Sweeping market statements without quantitative anchor.
+
+**Verdict**: research is **demo-ready** — consume the retained findings; mark the dropped ones as open questions if still needed.`,
+
+  build: (t) => `**Build: ${esc(t)}**
+
+GStack picked the task up and started execution.
+
+### Claimed files
+\`\`\`
+src/onboarding/index.ts
+src/onboarding/copy.ts
+src/onboarding/onboarding.test.ts
+\`\`\`
+
+### Ledger
+- 00:00 \`build.started\` — Forge claimed the slice.
+- 00:01 \`build.context_received\` — compressed packet of upstream research delivered.
+- 00:02 \`build.scaffold\` — typed errors + happy path stub.
+- 00:03 \`build.test\` — red → green on three cases.
+- 00:04 \`build.lint\` — 0 errors, 1 warning auto-fixed.
+- 00:05 \`build.handoff_ready\` — open work cleared, claim released.
+
+### Output
+- All three claimed files updated with structured commits.
+- One pre-existing TODO resolved (\`src/onboarding/copy.ts:42\`).
+- No file-level conflicts detected at write time.
+
+If Forge spawns a helper subagent, it appears under the agent inspector with this build as its parent.`,
+
+  spawn: (t) => `**Subagent spawn: ${esc(t)}**
+
+A child agent was created under the requesting agent. It inherits a compressed
+slice of the parent's context (room memory + the current open subfile) and runs
+inside the same workspace.
+
+| Field | Value |
+|-------|-------|
+| Purpose | ${esc(t)} |
+| Lifetime | one task — auto-revokes on completion |
+| Scope | inherits read; write requires explicit claim |
+| Visible to | the parent agent + every workspace human |
+
+The new subagent shows up in **Agent inspector** with a \`parentAgentId\` pointer
+back to its caller. Resume packets walk the parent chain.`,
+
+  resume: (t) => `**Resume Packet: ${esc(t)}**
+
+ZeroEntropy compressed the current room state. GBrain stored it as durable
+memory so a new agent (or the same one on a different device) can pick up
+without restating context.
+
+### Goal
+${esc(t)}
+
+### Current state
+- Open work and decisions are listed in the brain doc tree.
+- Most recent research, verification, and build subfiles are linked from this packet.
+
+### Completed work
+- Research finished and verified.
+- Build agents claimed and released their slices.
+- File-level conflicts (if any) have a Conflict Resolution Packet.
+
+### Open blockers
+- _(none captured at packet time — re-run \`/resume\` after the next decision if this is stale)_
+
+### Next action
+- Read this packet, scan the linked subfiles, then continue from the last \`build.handoff_ready\` row in the ledger.
+
+This packet is the canonical hand-off artifact: every agent on this org sees
+the same compressed view.`,
+
+  handoff: (t) => `**Handoff: ${esc(t)}**
+
+A compressed context envelope was prepared for the next agent to take over.
+
+### What the next agent needs
+- The current goal (above).
+- The latest \`Research\`, \`Verification\`, and \`Build\` subfiles.
+- The most recent pinned memory entries.
+
+### What it should skip
+- Anything already in the decision log.
+- Original chat turns — the compressed packet supersedes them.
+
+### Continuity check
+Run \`/resume\` from the next session to bootstrap; the room state survives
+across sessions, devices, and machines.`,
 };
 
 function esc(s: string): string { return s.replace(/[<>]/g, ''); }

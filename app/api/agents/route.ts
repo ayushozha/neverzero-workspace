@@ -1,12 +1,20 @@
 import { NextResponse } from 'next/server';
-import { createAgent, listAgents, type ClientId } from '@/lib/agents';
+import { createAgent, listAgents, type Agent, type ClientId } from '@/lib/agents';
+
+function publicAgent(agent: Agent) {
+  const { apiKeyHash: _apiKeyHash, scopes: _scopes, ...safe } = agent;
+  void _apiKeyHash;
+  void _scopes;
+  return safe;
+}
 
 export async function GET() {
   const agents = await listAgents();
-  return NextResponse.json({ agents });
+  return NextResponse.json({ agents: agents.map(publicAgent) });
 }
 
 const VALID_CLIENTS: ClientId[] = [
+  'codex',
   'claude-desktop', 'claude-code', 'cursor', 'vscode', 'windsurf',
   'antigravity', 'zed', 'continue', 'aider', 'custom',
 ];
@@ -51,7 +59,11 @@ export async function POST(req: Request) {
       metadata: typeof body.metadata === 'object' && body.metadata !== null
         ? (body.metadata as Record<string, string>) : undefined,
     });
-    return NextResponse.json(result, { status: 201 });
+    return NextResponse.json({
+      agent: publicAgent(result.agent),
+      apiKey: result.apiKey,
+      installSnippet: result.installSnippet,
+    }, { status: 201 });
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Internal error';
     return NextResponse.json({ error: msg }, { status: 400 });

@@ -7,10 +7,12 @@
 
 import { createHash, randomBytes } from 'node:crypto';
 import { existsSync, mkdirSync } from 'node:fs';
-import { readFile, writeFile } from 'node:fs/promises';
+import { open, readFile, rename, unlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { appendWorkspaceEvent } from './workspace-ledger';
 
 export type ClientId =
+  | 'codex'
   | 'claude-desktop'
   | 'claude-code'
   | 'cursor'
@@ -44,6 +46,10 @@ export interface Agent {
   createdAt: string;          // ISO
   lastSeenAt: string | null;  // ISO when the agent first verified
 
+  // Subagent tree — set when the agent was spawned by another agent.
+  // Resume packets walk this chain so a child can recover its parent's context.
+  parentAgentId?: string | null;
+
   // Platform-specific
   platform: {
     os?: 'mac' | 'win' | 'linux' | 'wsl' | null;
@@ -67,24 +73,105 @@ export interface AgentCreatedResponse {
 const ROOT = process.cwd();
 const DATA_DIR = join(ROOT, 'data');
 const STORE = join(DATA_DIR, 'agents.json');
+const LOCK = join(DATA_DIR, 'agents.json.lock');
+const LOCK_TIMEOUT_MS = 5_000;
+const LOCK_STALE_MS = 30_000;
 
 interface StoreFile {
   agents: Agent[];
 }
 
-async function readStore(): Promise<StoreFile> {
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isNodeError(error: unknown): error is NodeJS.ErrnoException {
+  return error instanceof Error && 'code' in error;
+}
+
+async function readStoreUnlocked(): Promise<StoreFile> {
   try {
     const txt = await readFile(STORE, 'utf8');
     const parsed = JSON.parse(txt) as Partial<StoreFile>;
     return { agents: Array.isArray(parsed.agents) ? parsed.agents : [] };
+  } catch (error) {
+    if (isNodeError(error) && error.code === 'ENOENT') {
+      return { agents: [] };
+    }
+    throw error;
+  }
+}
+
+async function readStore(): Promise<StoreFile> {
+  return readStoreUnlocked();
+}
+
+async function writeStoreUnlocked(s: StoreFile): Promise<void> {
+  if (!existsSync(DATA_DIR)) mkdirSync(DATA_DIR, { recursive: true });
+  const tmp = join(DATA_DIR, `agents.${process.pid}.${Date.now()}.${randomBytes(4).toString('hex')}.tmp`);
+  await writeFile(tmp, JSON.stringify(s, null, 2), 'utf8');
+  await rename(tmp, STORE);
+}
+
+async function maybeClearStaleLock(): Promise<void> {
+  try {
+    const raw = await readFile(LOCK, 'utf8');
+    const parsed = JSON.parse(raw) as { createdAt?: string };
+    const createdAt = parsed.createdAt ? Date.parse(parsed.createdAt) : 0;
+    if (createdAt && Date.now() - createdAt > LOCK_STALE_MS) {
+      await unlink(LOCK).catch(() => undefined);
+    }
   } catch {
-    return { agents: [] };
+    // If the lock file is unreadable, let the acquisition timeout decide.
+  }
+}
+
+type StoreLock = Awaited<ReturnType<typeof open>>;
+
+async function acquireStoreLock(): Promise<StoreLock> {
+  if (!existsSync(DATA_DIR)) mkdirSync(DATA_DIR, { recursive: true });
+  const started = Date.now();
+
+  while (true) {
+    try {
+      const lock = await open(LOCK, 'wx');
+      await lock.writeFile(JSON.stringify({ pid: process.pid, createdAt: new Date().toISOString() }));
+      return lock;
+    } catch (error) {
+      if (!isNodeError(error) || error.code !== 'EEXIST') throw error;
+      await maybeClearStaleLock();
+      if (Date.now() - started > LOCK_TIMEOUT_MS) {
+        throw new Error('Timed out waiting for agent registry lock.');
+      }
+      await sleep(25 + Math.floor(Math.random() * 25));
+    }
+  }
+}
+
+async function releaseStoreLock(lock: StoreLock): Promise<void> {
+  await lock.close().catch(() => undefined);
+  await unlink(LOCK).catch(() => undefined);
+}
+
+async function updateStore<T>(mutate: (store: StoreFile) => T | Promise<T>): Promise<T> {
+  const lock = await acquireStoreLock();
+  try {
+    const store = await readStoreUnlocked();
+    const result = await mutate(store);
+    await writeStoreUnlocked(store);
+    return result;
+  } finally {
+    await releaseStoreLock(lock);
   }
 }
 
 async function writeStore(s: StoreFile): Promise<void> {
-  if (!existsSync(DATA_DIR)) mkdirSync(DATA_DIR, { recursive: true });
-  await writeFile(STORE, JSON.stringify(s, null, 2), 'utf8');
+  const lock = await acquireStoreLock();
+  try {
+    await writeStoreUnlocked(s);
+  } finally {
+    await releaseStoreLock(lock);
+  }
 }
 
 // ───────── ID + Key generation ─────────
@@ -99,6 +186,25 @@ function newApiKey(): { key: string; prefix: string; hash: string } {
   const prefix = key.slice(0, 12); // "nz_live_xxxx"
   const hash = createHash('sha256').update(key).digest('hex');
   return { key, prefix, hash };
+}
+
+function hashApiKey(apiKey: string): string {
+  return createHash('sha256').update(apiKey).digest('hex');
+}
+
+function metadataFromRecord(input?: Record<string, unknown>): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [key, value] of Object.entries(input ?? {})) {
+    if (value === undefined || value === null || key.trim() === '') continue;
+    if (Array.isArray(value)) {
+      out[key] = value.map((item) => String(item)).join(', ');
+    } else if (typeof value === 'object') {
+      out[key] = JSON.stringify(value);
+    } else {
+      out[key] = String(value);
+    }
+  }
+  return out;
 }
 
 // ───────── Public API ─────────
@@ -116,6 +222,20 @@ export async function getAgent(id: string): Promise<Agent | undefined> {
   return s.agents.find((a) => a.id === id);
 }
 
+/** List direct subagents of a given parent agent id. */
+export async function listSubagents(parentAgentId: string): Promise<Agent[]> {
+  const s = await readStore();
+  return s.agents.filter((a) => a.parentAgentId === parentAgentId);
+}
+
+export async function authenticateAgentKey(apiKey: string): Promise<Agent | undefined> {
+  const trimmed = apiKey.trim();
+  if (!trimmed) return undefined;
+  const s = await readStore();
+  const hash = hashApiKey(trimmed);
+  return s.agents.find((a) => a.apiKeyHash === hash && a.status !== 'revoked');
+}
+
 export interface CreateAgentInput {
   name: string;
   from: ClientId;
@@ -124,7 +244,8 @@ export interface CreateAgentInput {
   workspace?: string;    // defaults to org slug
   scopes?: AgentScope[]; // defaults to ['read', 'write']
   platform?: Agent['platform'];
-  metadata?: Record<string, string>;
+  metadata?: Record<string, unknown>;
+  parentAgentId?: string | null;  // set when this agent was /spawn'd by another
 }
 
 export async function createAgent(input: CreateAgentInput): Promise<AgentCreatedResponse> {
@@ -149,54 +270,138 @@ export async function createAgent(input: CreateAgentInput): Promise<AgentCreated
     status: 'pending',
     createdAt: new Date().toISOString(),
     lastSeenAt: null,
+    parentAgentId: input.parentAgentId ?? null,
     platform: input.platform ?? {},
-    metadata: input.metadata ?? {},
+    metadata: metadataFromRecord(input.metadata),
   };
 
-  const store = await readStore();
-  store.agents.push(agent);
-  await writeStore(store);
+  await updateStore((store) => {
+    store.agents.push(agent);
+  });
+
+  await appendWorkspaceEvent({
+    type: 'agent_registered',
+    orgSlug,
+    agentId: agent.id,
+    summary: `${agent.name} registered from ${agent.from}.`,
+    metadata: {
+      agent_name: agent.name,
+      agent_from: agent.from,
+      runtime: agent.platform.runtime,
+      machine: agent.platform.machine,
+      os: agent.platform.os,
+      workspace: agent.workspace,
+      owned_by: agent.ownedBy,
+      api_key_prefix: agent.apiKeyPrefix,
+      ...agent.metadata,
+    },
+  });
 
   return {
     agent,
     apiKey: key,
-    installSnippet: buildInstallSnippet(agent.from, key, agent.workspace),
+    installSnippet: buildInstallSnippet(agent.from, '<one-time-key-returned-as-apiKey>', agent.workspace),
   };
 }
 
 export async function revokeAgent(id: string): Promise<Agent | undefined> {
-  const store = await readStore();
-  const idx = store.agents.findIndex((a) => a.id === id);
-  if (idx < 0) return undefined;
-  const existing = store.agents[idx];
-  if (!existing) return undefined;
-  const updated: Agent = { ...existing, status: 'revoked' };
-  store.agents[idx] = updated;
-  await writeStore(store);
-  return updated;
+  return updateStore((store) => {
+    const idx = store.agents.findIndex((a) => a.id === id);
+    if (idx < 0) return undefined;
+    const existing = store.agents[idx];
+    if (!existing) return undefined;
+    const updated: Agent = { ...existing, status: 'revoked' };
+    store.agents[idx] = updated;
+    return updated;
+  });
 }
 
 /** Called when the agent first checks in — flips status to 'connected'. */
 export async function markVerified(id: string): Promise<Agent | undefined> {
-  const store = await readStore();
-  const idx = store.agents.findIndex((a) => a.id === id);
-  if (idx < 0) return undefined;
-  const existing = store.agents[idx];
-  if (!existing) return undefined;
-  const updated: Agent = {
-    ...existing,
-    status: existing.status === 'revoked' ? 'revoked' : 'connected',
-    lastSeenAt: new Date().toISOString(),
-  };
-  store.agents[idx] = updated;
-  await writeStore(store);
-  return updated;
+  return updateStore((store) => {
+    const idx = store.agents.findIndex((a) => a.id === id);
+    if (idx < 0) return undefined;
+    const existing = store.agents[idx];
+    if (!existing) return undefined;
+    const updated: Agent = {
+      ...existing,
+      status: existing.status === 'revoked' ? 'revoked' : 'connected',
+      lastSeenAt: new Date().toISOString(),
+    };
+    store.agents[idx] = updated;
+    return updated;
+  });
+}
+
+export interface HeartbeatPatch {
+  sessionId?: string;
+  currentTask?: string;
+  projectPath?: string;
+  capabilities?: string[] | string;
+  runtime?: string;
+  machine?: string;
+  os?: Agent['platform']['os'];
+  status?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export async function recordHeartbeat(
+  id: string,
+  patch: HeartbeatPatch = {},
+): Promise<Agent | undefined> {
+  return updateStore((store) => {
+    const idx = store.agents.findIndex((a) => a.id === id);
+    if (idx < 0) return undefined;
+    const existing = store.agents[idx];
+    if (!existing) return undefined;
+
+    const now = new Date().toISOString();
+    const metadata = metadataFromRecord({
+      ...patch.metadata,
+      session_id: patch.sessionId,
+      current_task: patch.currentTask,
+      project_path: patch.projectPath,
+      capabilities: Array.isArray(patch.capabilities)
+        ? patch.capabilities.join(', ')
+        : patch.capabilities,
+      heartbeat_runtime: patch.runtime,
+      heartbeat_machine: patch.machine,
+      heartbeat_status: patch.status,
+      last_heartbeat_at: now,
+    });
+
+    const updated: Agent = {
+      ...existing,
+      status: existing.status === 'revoked' ? 'revoked' : 'connected',
+      lastSeenAt: now,
+      platform: {
+        ...existing.platform,
+        ...(patch.os ? { os: patch.os } : {}),
+        ...(patch.runtime ? { runtime: patch.runtime } : {}),
+        ...(patch.machine ? { machine: patch.machine } : {}),
+      },
+      metadata: {
+        ...existing.metadata,
+        ...metadata,
+      },
+    };
+
+    store.agents[idx] = updated;
+    return updated;
+  });
 }
 
 // ───────── Snippet generation ─────────
 
 function buildInstallSnippet(client: ClientId, apiKey: string, workspace: string): string {
   switch (client) {
+    case 'codex':
+      return [
+        `NEVERZERO_API_KEY=${apiKey}`,
+        `NEVERZERO_WORKSPACE=${workspace}`,
+        'NEVERZERO_CONTEXT_URL=http://localhost:3000/api/context',
+        'NEVERZERO_HEARTBEAT_INTERVAL_SECONDS=60',
+      ].join('\n');
     case 'claude-desktop':
     case 'cursor':
     case 'windsurf':

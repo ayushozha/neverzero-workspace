@@ -10,6 +10,7 @@ import {
   type CSSProperties,
   type ReactNode,
 } from 'react';
+import { Icons } from '@/app/workstation/_client/icons';
 
 type AgentStatus = 'pending' | 'connected' | 'revoked';
 type SkillStatus = 'pending' | 'running' | 'done' | 'error';
@@ -30,6 +31,7 @@ export interface BrainPerson { name: string; role: string; initials: string; ton
 
 export interface BrainSubfile {
   id: string;
+  parentId: string | null;
   title: string;
   createdAt: string;
   skillRun?: {
@@ -64,6 +66,7 @@ export interface BrainOrgData {
   slug: string;
   name: string;
   domain: string;
+  brainDocId: string;
   tagline: string;
   mission: string;
   industry: string;
@@ -86,6 +89,20 @@ export interface BrainData {
 }
 
 type AgentColorStyle = CSSProperties & { ['--agent-color']?: string };
+type TreeDepthStyle = CSSProperties & { ['--tree-depth']?: number };
+
+type DocsApiNode = {
+  id: string;
+  parentId: string | null;
+  title: string;
+  kind: string;
+  createdAt: string;
+  skillRun?: BrainSubfile['skillRun'];
+};
+
+interface BrainTreeNode extends BrainSubfile {
+  children: BrainTreeNode[];
+}
 
 // ─────────── helpers ───────────
 
@@ -126,10 +143,69 @@ function shortPath(machine?: string | null, os?: string | null): string {
   return [machine, os].filter(Boolean).join(' · ');
 }
 
+function compactDocTitle(title: string): string {
+  return title.replace(/^[A-Z]+(?:-[A-Z]+)?:\s+/, '');
+}
+
+function nextSubfileTitle(subfiles: BrainSubfile[]): string {
+  const titles = new Set(subfiles.map((s) => s.title));
+  if (!titles.has('New file')) return 'New file';
+  let index = 2;
+  while (titles.has(`New file ${index}`)) index += 1;
+  return `New file ${index}`;
+}
+
+function apiDocToSubfile(doc: DocsApiNode): BrainSubfile {
+  return {
+    id: doc.id,
+    parentId: doc.parentId,
+    title: doc.title,
+    createdAt: doc.createdAt,
+    skillRun: doc.skillRun,
+  };
+}
+
+function buildSubfileTree(subfiles: BrainSubfile[], rootDocId: string): BrainTreeNode[] {
+  const byParent = new Map<string, BrainSubfile[]>();
+  const ids = new Set(subfiles.map((s) => s.id));
+  for (const subfile of subfiles) {
+    const parentId = subfile.parentId && (subfile.parentId === rootDocId || ids.has(subfile.parentId))
+      ? subfile.parentId
+      : rootDocId;
+    byParent.set(parentId, [...(byParent.get(parentId) ?? []), subfile]);
+  }
+
+  const visit = (parentId: string): BrainTreeNode[] => (byParent.get(parentId) ?? []).map((subfile) => ({
+    ...subfile,
+    children: visit(subfile.id),
+  }));
+
+  return visit(rootDocId);
+}
+
 const PROVIDER_LABELS: Record<string, string> = {
   gbrain: 'GBrain', gstack: 'GStack', zeroentropy: 'ZeroEntropy',
   'the-hog': 'The Hog', lightsprint: 'Lightsprint', neverzero: 'NeverZero',
 };
+
+// Match the Icons set in workstation/_client/icons. Falls back to Doc.
+function iconForSkillKind(kind?: string): (p: { className?: string; size?: number }) => ReactNode {
+  switch (kind) {
+    case 'plan': case 'decompose': case 'estimate': case 'schedule':
+      return Icons.Plan;
+    case 'research': case 'recall': case 'cite': case 'compete': case 'summarize':
+      return Icons.Search;
+    case 'scaffold': case 'refactor': case 'test': case 'lint':
+    case 'deploy': case 'rollback': case 'monitor': case 'release':
+      return Icons.Branch;
+    case 'review': case 'factcheck': case 'redteam': case 'critique':
+      return Icons.Decision;
+    case 'remember': case 'pin': case 'compress':
+      return Icons.Memory;
+    default:
+      return Icons.Doc;
+  }
+}
 
 // ─────────── Inline command bar (built on top of the doc) ───────────
 
@@ -725,11 +801,160 @@ function KV({ l, v }: { l: string; v: string }) {
 
 // ─────────── Root ───────────
 
-export default function BrainWorkstation({ initial }: { initial: BrainData }) {
+function BrainFileTreeRow({
+  node,
+  depth,
+  activeSubfileId,
+  orgSlug,
+  creatingParentId,
+  deletingDocId,
+  onCreate,
+  onDelete,
+}: {
+  node: BrainTreeNode;
+  depth: number;
+  activeSubfileId?: string;
+  orgSlug: string;
+  creatingParentId: string | null;
+  deletingDocId: string | null;
+  onCreate: (parentId: string) => void;
+  onDelete: (doc: BrainSubfile) => void;
+}) {
+  const Icon = iconForSkillKind(node.skillRun?.kind);
+  const isActive = activeSubfileId === node.id;
+  const isCreating = creatingParentId === node.id;
+  const isDeleting = deletingDocId === node.id;
+
+  return (
+    <>
+      <div
+        className={'side-row brain-file-row' + (isActive ? ' active' : '')}
+        data-depth={depth}
+        style={{ ['--tree-depth']: depth } as TreeDepthStyle}
+      >
+        <Link
+          href={`/${orgSlug}/docs/${node.id}`}
+          className="brain-file-main"
+          title={node.title}
+        >
+          <Icon className="ico" size={14} />
+          <span className="brain-file-name">{compactDocTitle(node.title)}</span>
+        </Link>
+        <div className="brain-file-actions" aria-label={`${node.title} file actions`}>
+          <button
+            className="brain-file-action"
+            type="button"
+            title="Add nested file"
+            aria-label={`Add nested file under ${node.title}`}
+            disabled={isCreating}
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              onCreate(node.id);
+            }}
+          >
+            <Icons.Plus size={11} />
+          </button>
+          <button
+            className="brain-file-action danger"
+            type="button"
+            title="Delete file"
+            aria-label={`Delete ${node.title}`}
+            disabled={isDeleting}
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              onDelete(node);
+            }}
+          >
+            x
+          </button>
+        </div>
+      </div>
+      {node.children.map((child) => (
+        <BrainFileTreeRow
+          key={child.id}
+          node={child}
+          depth={depth + 1}
+          activeSubfileId={activeSubfileId}
+          orgSlug={orgSlug}
+          creatingParentId={creatingParentId}
+          deletingDocId={deletingDocId}
+          onCreate={onCreate}
+          onDelete={onDelete}
+        />
+      ))}
+    </>
+  );
+}
+
+export default function BrainWorkstation({
+  initial,
+  centerBody,
+  activeSubfileId,
+}: {
+  initial: BrainData;
+  /** When provided, replaces the default brain doc body (used by /[org]/docs/[id]). */
+  centerBody?: ReactNode;
+  /** When set, the sidebar highlights this subfile instead of the Company brain root. */
+  activeSubfileId?: string;
+}) {
   const router = useRouter();
   const [data, setData] = useState<BrainData>(initial);
   const [railTab, setRailTab] = useState<'activity' | 'agent' | 'memory' | 'context'>('activity');
   const [focusedAgentId, setFocusedAgentId] = useState<string | null>(initial.agents[0]?.id ?? null);
+  const [creatingParentId, setCreatingParentId] = useState<string | null>(null);
+  const [deletingDocId, setDeletingDocId] = useState<string | null>(null);
+  const [sideError, setSideError] = useState<string | null>(null);
+  const [handoffPending, setHandoffPending] = useState(false);
+  const [pushPending, setPushPending] = useState(false);
+  const [topbarToast, setTopbarToast] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
+
+  useEffect(() => {
+    if (!topbarToast) return;
+    const t = setTimeout(() => setTopbarToast(null), 3500);
+    return () => clearTimeout(t);
+  }, [topbarToast]);
+
+  const runHandoff = async () => {
+    if (handoffPending) return;
+    setHandoffPending(true); setTopbarToast(null);
+    try {
+      const res = await fetch(`/api/orgs/${initial.org.slug}/resume`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ requestedBy: 'doc-author' }),
+      });
+      const json = (await res.json()) as { ok?: boolean; doc?: { id: string; title: string }; error?: string };
+      if (!res.ok || !json.doc) throw new Error(json.error || 'resume failed');
+      setTopbarToast({ kind: 'ok', text: `Resume Packet created — ${json.doc.title}` });
+      router.push(`/${initial.org.slug}/docs/${json.doc.id}`);
+    } catch (err) {
+      setTopbarToast({ kind: 'err', text: err instanceof Error ? err.message : 'handoff failed' });
+    } finally {
+      setHandoffPending(false);
+    }
+  };
+
+  const runGithubPush = async () => {
+    if (pushPending) return;
+    setPushPending(true); setTopbarToast(null);
+    try {
+      const res = await fetch(`/api/orgs/${initial.org.slug}/github`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ requestedBy: 'doc-author' }),
+      });
+      const json = (await res.json()) as { ok?: boolean; doc?: { id: string; title: string }; error?: string };
+      if (!res.ok || !json.doc) throw new Error(json.error || 'push failed');
+      setTopbarToast({ kind: 'ok', text: `GitHub bundle prepared — ${json.doc.title}` });
+      router.push(`/${initial.org.slug}/docs/${json.doc.id}`);
+    } catch (err) {
+      setTopbarToast({ kind: 'err', text: err instanceof Error ? err.message : 'push failed' });
+    } finally {
+      setPushPending(false);
+    }
+  };
 
   // Subscribe to org SSE so the doc updates live when skills run.
   useEffect(() => {
@@ -747,9 +972,9 @@ export default function BrainWorkstation({ initial }: { initial: BrainData }) {
           fetch(`/api/orgs/${initial.org.slug}/agents`, { cache: 'no-store' }).then((r) => r.json()),
         ]);
         if (canceled) return;
-        const subfiles: BrainSubfile[] = (docsR.docs || [])
+        const subfiles: BrainSubfile[] = ((docsR.docs || []) as DocsApiNode[])
           .filter((d: { kind: string }) => d.kind === 'subfile')
-          .map((d: BrainSubfile) => d);
+          .map(apiDocToSubfile);
         const research: BrainResearch[] = (researchR.research || []).map((r: BrainResearch) => r);
         const agents: BrainAgent[] = ((agentsR.agents || []) as Array<{
           id: string; name: string; from: string; status: AgentStatus; apiKeyPrefix: string;
@@ -759,17 +984,79 @@ export default function BrainWorkstation({ initial }: { initial: BrainData }) {
           machine: a.platform?.machine ?? null, os: a.platform?.os ?? null,
           glyph: glyphOf(a.name), color: colorForAgent(a.name, i),
         }));
-        setData((prev) => ({ ...prev, subfiles, research, agents }));
+        const rootDocId = typeof docsR.root?.id === 'string' ? docsR.root.id : undefined;
+        setData((prev) => ({
+          ...prev,
+          org: rootDocId ? { ...prev.org, brainDocId: rootDocId } : prev.org,
+          subfiles,
+          research,
+          agents,
+        }));
       } catch { /* ignore network blips */ }
     };
     return () => { canceled = true; es.close(); };
   }, [initial.org.slug]);
+
+  const createSubfile = async (parentId: string) => {
+    if (creatingParentId) return;
+    const cleanTitle = nextSubfileTitle(data.subfiles);
+
+    setSideError(null);
+    setCreatingParentId(parentId);
+    try {
+      const res = await fetch(`/api/orgs/${data.org.slug}/docs`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: cleanTitle, parentId, createdBy: 'user' }),
+      });
+      const result = (await res.json()) as { doc?: DocsApiNode; error?: string };
+      if (!res.ok || !result.doc) throw new Error(result.error || 'Create failed');
+      const subfile = apiDocToSubfile(result.doc);
+      setData((prev) => ({
+        ...prev,
+        subfiles: [subfile, ...prev.subfiles.filter((s) => s.id !== subfile.id)],
+      }));
+      router.push(`/${data.org.slug}/docs/${subfile.id}`);
+      router.refresh();
+    } catch (error) {
+      setSideError(error instanceof Error ? error.message : 'Create failed');
+    } finally {
+      setCreatingParentId(null);
+    }
+  };
+
+  const deleteSubfile = async (doc: BrainSubfile) => {
+    if (deletingDocId) return;
+
+    setSideError(null);
+    setDeletingDocId(doc.id);
+    try {
+      const res = await fetch(`/api/orgs/${data.org.slug}/docs/${doc.id}`, { method: 'DELETE' });
+      const result = (await res.json()) as { deletedIds?: string[]; error?: string };
+      if (!res.ok) throw new Error(result.error || 'Delete failed');
+      const deletedIds = new Set(result.deletedIds ?? [doc.id]);
+      setData((prev) => ({ ...prev, subfiles: prev.subfiles.filter((s) => !deletedIds.has(s.id)) }));
+      if (activeSubfileId && deletedIds.has(activeSubfileId)) {
+        router.push(`/${data.org.slug}/brain`);
+      } else {
+        router.refresh();
+      }
+    } catch (error) {
+      setSideError(error instanceof Error ? error.message : 'Delete failed');
+    } finally {
+      setDeletingDocId(null);
+    }
+  };
 
   const workingAgents = data.agents.filter((a) => a.status === 'connected').length;
   const openSubfiles = data.subfiles.filter((s) => s.skillRun?.status !== 'done').length;
   const completedSubfiles = data.subfiles.filter((s) => s.skillRun?.status === 'done');
   const runningSubfile = data.subfiles.find((s) => s.skillRun?.status === 'running' || s.skillRun?.status === 'pending');
   const focusedAgent = data.agents.find((a) => a.id === focusedAgentId) ?? data.agents[0];
+  const subfileTree = useMemo(
+    () => buildSubfileTree(data.subfiles, data.org.brainDocId),
+    [data.subfiles, data.org.brainDocId],
+  );
 
   return (
     <div className="workstation-root">
@@ -821,56 +1108,126 @@ export default function BrainWorkstation({ initial }: { initial: BrainData }) {
                 <span className="more">+{(data.agents.length - 5) + (data.people.length - 4)}</span>
               )}
             </div>
+            <button
+              className="btn"
+              type="button"
+              onClick={() => void runHandoff()}
+              disabled={handoffPending}
+              title="Generate a Resume Packet snapshot of this room"
+            >
+              <span style={{ fontSize: 12 }}>{handoffPending ? 'Compressing…' : 'Hand off'}</span>
+            </button>
+            <button
+              className="btn"
+              type="button"
+              onClick={() => void runGithubPush()}
+              disabled={pushPending}
+              title="Bundle the room state and stage it for a GitHub PR"
+            >
+              <span style={{ fontSize: 12 }}>{pushPending ? 'Bundling…' : 'Push to GitHub'}</span>
+            </button>
             <button className="btn primary" type="button">Share</button>
           </div>
         </div>
+        {topbarToast && (
+          <div
+            style={{
+              position: 'fixed', top: 56, right: 16, zIndex: 50,
+              padding: '8px 12px', borderRadius: 8,
+              fontFamily: 'Geist Mono, monospace', fontSize: 12,
+              background: topbarToast.kind === 'ok' ? 'oklch(0.96 0.06 150)' : 'oklch(0.95 0.08 25)',
+              color: topbarToast.kind === 'ok' ? 'oklch(0.36 0.13 150)' : 'oklch(0.4 0.14 25)',
+              border: `1px solid ${topbarToast.kind === 'ok' ? 'oklch(0.86 0.12 150)' : 'oklch(0.85 0.13 25)'}`,
+              boxShadow: '0 10px 26px -14px rgba(0,0,0,0.25)',
+            }}
+          >
+            {topbarToast.text}
+          </div>
+        )}
 
         {/* Sidebar */}
         <div className="side">
           <div className="side-sec">Workspace</div>
           <div className="side-row">
-            <span style={{ width: 16 }} />
+            <Icons.Globe className="ico" size={14} />
             <span>{data.org.name}</span>
-            <span className="meta">{data.org.domain}</span>
+            <span className="meta">{data.org.domain.replace(/\.neverzero\.org$/, '')}</span>
           </div>
           <div className="side-row">
-            <span style={{ width: 16 }} />
+            <Icons.Memory className="ico" size={14} />
             <span>Shared memory</span>
             <span className="meta">{data.org.memories.length}</span>
           </div>
-          <div className="side-row">
-            <span style={{ width: 16 }} />
-            <Link href={`/${data.org.slug}/agents`} style={{ color: 'inherit', textDecoration: 'none' }}>Agent registry</Link>
+          <Link href={`/${data.org.slug}/agents`} className="side-row" style={{ textDecoration: 'none', color: 'inherit' }}>
+            <Icons.Agents className="ico" size={14} />
+            <span>Agent registry</span>
             <span className="meta">{data.agents.length}</span>
-          </div>
+          </Link>
 
-          <div className="side-sec">Doc tree · {data.org.name}</div>
-          <div className="side-row active">
-            <span style={{ width: 16 }} />
-            <span>Company brain</span>
-            <span className="meta">root</span>
+          <div className="side-sec brain-tree-sec">
+            <span>{data.org.name} - Company brain</span>
+            <button
+              className="brain-tree-head-action"
+              type="button"
+              title="Add file"
+              aria-label="Add file"
+              disabled={creatingParentId === data.org.brainDocId}
+              onClick={() => void createSubfile(data.org.brainDocId)}
+            >
+              <Icons.Plus size={12} />
+            </button>
           </div>
-          {data.subfiles.slice(0, 12).map((s) => (
-            <Link key={s.id} href={`/${data.org.slug}/docs/${s.id}`} className="side-row indent" style={{ textDecoration: 'none', color: 'var(--ink-soft)' }}>
-              <span style={{ width: 16, fontFamily: 'Geist Mono, monospace', fontSize: 10, color: 'var(--muted)' }}>
-                {s.skillRun?.command.replace('/', '') || '·'}
-              </span>
-              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.title.replace(/^[A-Z]+: /, '')}</span>
-            </Link>
-          ))}
-          {data.subfiles.length === 0 && (
-            <div className="side-row" style={{ color: 'var(--muted)', fontStyle: 'italic' }}>
-              <span style={{ width: 16 }} />
-              <span>No subfiles yet. Run /plan or /research above.</span>
+          <div className="brain-file-tree" aria-label={`${data.org.name} brain files`}>
+            <div className={'side-row brain-file-row brain-file-root' + (activeSubfileId ? '' : ' active')}>
+              <Link href={`/${data.org.slug}/brain`} className="brain-file-main">
+                <Icons.ChevD className="ico" size={14} />
+                <Icons.Doc className="ico" size={14} />
+                <span className="brain-file-name">Company brain</span>
+              </Link>
+              <div className="brain-file-actions" aria-label="Company brain file actions">
+                <button
+                  className="brain-file-action"
+                  type="button"
+                  title="Add file"
+                  aria-label="Add file under Company brain"
+                  disabled={creatingParentId === data.org.brainDocId}
+                  onClick={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    void createSubfile(data.org.brainDocId);
+                  }}
+                >
+                  <Icons.Plus size={11} />
+                </button>
+              </div>
             </div>
-          )}
-          {data.subfiles.length > 12 && (
-            <Link href={`/${data.org.slug}/brain`} className="side-row indent" style={{ color: 'var(--muted)' }}>
-              <span style={{ width: 16 }} />
-              <span>+{data.subfiles.length - 12} more</span>
-            </Link>
-          )}
-
+            {subfileTree.map((node) => (
+              <BrainFileTreeRow
+                key={node.id}
+                node={node}
+                depth={1}
+                activeSubfileId={activeSubfileId}
+                orgSlug={data.org.slug}
+                creatingParentId={creatingParentId}
+                deletingDocId={deletingDocId}
+                onCreate={(parentId) => void createSubfile(parentId)}
+                onDelete={(doc) => void deleteSubfile(doc)}
+              />
+            ))}
+            {data.subfiles.length === 0 && (
+              <div className="brain-file-empty">No files yet. Create one or run a skill.</div>
+            )}
+            {sideError && <div className="brain-side-error">{sideError}</div>}
+          </div>
+          <Link href={`/${data.org.slug}/research`} className="side-row indent" style={{ textDecoration: 'none', color: 'var(--ink-soft)' }}>
+            <Icons.Search className="ico" size={14} />
+            <span>Research</span>
+            <span className="meta">{data.research.length}</span>
+          </Link>
+          <Link href={`/${data.org.slug}/install`} className="side-row indent" style={{ textDecoration: 'none', color: 'var(--ink-soft)' }}>
+            <Icons.Branch className="ico" size={14} />
+            <span>Deploys</span>
+          </Link>
           <div className="side-sec">Agents on this doc</div>
           {data.agents.map((a) => (
             <button
@@ -902,6 +1259,9 @@ export default function BrainWorkstation({ initial }: { initial: BrainData }) {
 
         {/* Doc */}
         <div className="doc">
+          {centerBody ? (
+            <div className="doc-body">{centerBody}</div>
+          ) : (
           <div className="doc-body">
             <div className="doc-meta">
               <span className="pill">
@@ -1006,6 +1366,7 @@ export default function BrainWorkstation({ initial }: { initial: BrainData }) {
               {' '}domain: {data.org.domain}
             </p>
           </div>
+          )}
         </div>
 
         {/* Right rail */}

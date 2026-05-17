@@ -15,6 +15,8 @@ import {
   SKILLS,
   EVENTS,
   MEMORY,
+  countWorkingAgents,
+  getTopActiveAgents,
   type Agent,
   type Skill,
 } from './data';
@@ -101,6 +103,9 @@ const CURSOR_POSITIONS = {
   forge: [{ x: 0.18, y: 0.78 }, { x: 0.45, y: 0.80 }, { x: 0.12, y: 0.76 }, { x: 0.50, y: 0.82 }],
   yuna:  [{ x: 0.62, y: 0.30 }, { x: 0.40, y: 0.34 }, { x: 0.30, y: 0.32 }, { x: 0.55, y: 0.36 }],
 } as const;
+
+const DOC_AGENTS = getTopActiveAgents(AGENTS);
+const REGISTERED_AGENT_COUNT = AGENTS.length;
 
 function ContextStrip({
   ctx,
@@ -370,13 +375,17 @@ function TopBar({
   project,
   peopleHere,
   agentsHere,
+  registeredAgentCount,
   onOpenAgent,
 }: {
   project: { workspace: string; name: string; doc: string };
   peopleHere: typeof PEOPLE;
   agentsHere: Agent[];
+  registeredAgentCount: number;
   onOpenAgent: (id: string) => void;
 }) {
+  const hiddenAgentCount = Math.max(0, registeredAgentCount - agentsHere.length);
+
   return (
     <div className="topbar">
       <div className="brand">
@@ -429,7 +438,7 @@ function TopBar({
               );
             })}
           </div>
-          <span className="more">+3</span>
+          {hiddenAgentCount > 0 && <span className="more">+{hiddenAgentCount}</span>}
         </div>
         <button className="btn" title="Sync">
           <Icons.Sync size={14} />
@@ -447,10 +456,14 @@ function TopBar({
 
 function Sidebar({
   activeId,
+  agentsHere,
+  registeredAgentCount,
   onPick,
   onOpenAgent,
 }: {
   activeId: string;
+  agentsHere: Agent[];
+  registeredAgentCount: number;
   onPick: (id: string) => void;
   onOpenAgent: (id: string) => void;
 }) {
@@ -469,7 +482,7 @@ function Sidebar({
       <div className="side-row">
         <Icons.Agents className="ico" size={14} />
         <span>Agent roster</span>
-        <span className="meta">5</span>
+        <span className="meta">{registeredAgentCount}</span>
       </div>
 
       <div className="side-sec">Atlas — Q3 Launch</div>
@@ -509,7 +522,7 @@ function Sidebar({
       </div>
 
       <div className="side-sec">Agents on this doc</div>
-      {AGENTS.filter((a) => a.attached).map((a) => {
+      {agentsHere.map((a) => {
         const style: AgentColorStyle = { ['--agent-color']: a.color };
         return (
           <div
@@ -802,7 +815,7 @@ function RightRail({
   eventCount: number;
 }) {
   const focused =
-    AGENTS.find((a) => a.id === focusedAgentId) || AGENTS.find((a) => a.state === 'working');
+    AGENTS.find((a) => a.id === focusedAgentId) || DOC_AGENTS[0] || AGENTS[0];
   return (
     <div className="rail">
       <div className="rail-tabs">
@@ -1042,11 +1055,12 @@ export default function WorkstationApp() {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [mobilePop, setMobilePop] = useState(false);
   const [railTab, setRailTab] = useState<'activity' | 'agent' | 'memory' | 'context'>('agent');
-  const [focusedAgent, setFocusedAgent] = useState('iris');
+  const [focusedAgent, setFocusedAgent] = useState(() => DOC_AGENTS[0]?.id || AGENTS[0]?.id || 'iris');
   const [activeDocId, setActiveDocId] = useState('plan');
   const [ctx, setCtx] = useState({ used: 84, turns: 142, tokens: '84.2K' });
   const [compressing, setCompressing] = useState(false);
   const [todos, setTodos] = useState<Todo[]>(INITIAL_TODOS);
+  const workingAgentCount = countWorkingAgents(DOC_AGENTS);
 
   const toggleTodo = (id: number) =>
     setTodos((ts) => ts.map((t) => (t.id === id ? { ...t, done: !t.done } : t)));
@@ -1106,10 +1120,17 @@ export default function WorkstationApp() {
       <TopBar
         project={{ workspace: 'Acme Robotics', name: 'Atlas', doc: 'Q3 Launch plan' }}
         peopleHere={PEOPLE.filter((p) => p.online)}
-        agentsHere={AGENTS}
+        agentsHere={DOC_AGENTS}
+        registeredAgentCount={REGISTERED_AGENT_COUNT}
         onOpenAgent={onOpenAgent}
       />
-      <Sidebar activeId={activeDocId} onPick={setActiveDocId} onOpenAgent={onOpenAgent} />
+      <Sidebar
+        activeId={activeDocId}
+        agentsHere={DOC_AGENTS}
+        registeredAgentCount={REGISTERED_AGENT_COUNT}
+        onPick={setActiveDocId}
+        onOpenAgent={onOpenAgent}
+      />
 
       <div className="doc">
         <div className="doc-body">
@@ -1118,7 +1139,7 @@ export default function WorkstationApp() {
 
           <div className="doc-meta">
             <span className="pill">
-              <span className="dot" /> Live · 2 agents working
+              <span className="dot" /> Live · {workingAgentCount} {workingAgentCount === 1 ? 'agent' : 'agents'} working
             </span>
             <span>Updated 14s ago</span>
             <span>·</span>
@@ -1238,7 +1259,7 @@ export default function WorkstationApp() {
 
           <hr className="rule" />
           <p style={{ fontSize: 12.5, color: 'var(--muted)', marginBottom: 0 }}>
-            Last sync 14s ago · 4 humans, 5 agents in this workspace · indexed by ZeroEntropy · running on
+            Last sync 14s ago · 4 humans, {REGISTERED_AGENT_COUNT} agents in this workspace · indexed by ZeroEntropy · running on
             Lightsprint
           </p>
         </div>

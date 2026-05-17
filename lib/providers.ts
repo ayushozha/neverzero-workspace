@@ -10,7 +10,8 @@ export type SkillKind =
   | 'research' | 'compete' | 'recall' | 'cite' | 'summarize'
   | 'review' | 'factcheck' | 'redteam' | 'critique'
   | 'remember' | 'compress' | 'pin'
-  | 'rollback' | 'monitor' | 'release';
+  | 'rollback' | 'monitor' | 'release'
+  | 'verify' | 'build' | 'spawn' | 'resume' | 'handoff';
 
 export interface SkillDef {
   id: string;                  // unique, e.g. "gbrain.plan"
@@ -109,6 +110,27 @@ export const ALL_SKILLS: SkillDef[] = [
   { id: 'nz.compress', name: 'compress', command: '/compress', provider: 'neverzero', kind: 'compress',
     description: 'Collapse old turns into a recap.',
     subfileTitleFor: (t) => `Compressed recap: ${titleSlice(t)}` },
+
+  // The Hog — verification (audits a research subfile against pinned memory)
+  { id: 'hog.verify', name: 'verify', command: '/verify', provider: 'the-hog', kind: 'verify',
+    description: 'Verify a research subfile — retain strong claims, drop weak ones.',
+    subfileTitleFor: (t) => `Verification Report: ${titleSlice(t)}` },
+
+  // GStack — build / spawn / handoff
+  { id: 'gstack.build', name: 'build', command: '/build', provider: 'gstack', kind: 'build',
+    description: 'Claim work + run the build agent; writes ledger rows on progress.',
+    subfileTitleFor: (t) => `Build: ${titleSlice(t)}` },
+  { id: 'gstack.spawn', name: 'spawn', command: '/spawn', provider: 'gstack', kind: 'spawn',
+    description: 'Spawn a subagent with a sliced parent context.',
+    subfileTitleFor: (t) => `Subagent: ${titleSlice(t)}` },
+
+  // NeverZero — resume / handoff (cross-session continuity)
+  { id: 'nz.resume', name: 'resume', command: '/resume', provider: 'neverzero', kind: 'resume',
+    description: 'Generate a Resume Packet for the next session/device.',
+    subfileTitleFor: (t) => `Resume Packet: ${titleSlice(t)}` },
+  { id: 'nz.handoff', name: 'handoff', command: '/handoff', provider: 'neverzero', kind: 'handoff',
+    description: 'Hand work off to another agent with compressed context.',
+    subfileTitleFor: (t) => `Handoff: ${titleSlice(t)}` },
 ];
 
 export function skillsForProviders(providers: ProviderId[]): SkillDef[] {
