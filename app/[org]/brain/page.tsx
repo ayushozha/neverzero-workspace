@@ -1,8 +1,21 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { getOrg, type Org } from '@/lib/orgs';
+import { getOrg, setOrgProviders, type Org } from '@/lib/orgs';
 import { listAgents } from '@/lib/agents';
+import { ensureBrainRoot, listDocs } from '@/lib/docs';
+import CommandBar from './_components/CommandBar';
 import './brain.css';
+import './_components/command-bar.css';
+
+const DEFAULT_PROVIDERS = ['gbrain', 'gstack', 'zeroentropy', 'the-hog'] as const;
+
+function relativeTs(iso: string): string {
+  const ms = Date.now() - new Date(iso).getTime();
+  if (ms < 60_000) return Math.max(0, Math.floor(ms / 1000)) + 's ago';
+  if (ms < 3_600_000) return Math.floor(ms / 60_000) + 'm ago';
+  if (ms < 86_400_000) return Math.floor(ms / 3_600_000) + 'h ago';
+  return Math.floor(ms / 86_400_000) + 'd ago';
+}
 
 export const dynamic = 'force-dynamic';
 
@@ -44,6 +57,22 @@ export default async function OrgBrainPage({
   const roster = org.agentRoster.map((id) => AGENT_LABELS[id]).filter(Boolean);
   const missionParagraph = rewriteMission(org);
 
+  // Backfill: legacy orgs created before providers were a field get the
+  // default set installed on first view of the brain. Idempotent — only
+  // writes when the field is genuinely absent/empty.
+  const installedProviders = (org.providers && org.providers.length > 0)
+    ? org.providers
+    : (await setOrgProviders(org.slug, [...DEFAULT_PROVIDERS]) ?? [...DEFAULT_PROVIDERS]);
+
+  // Ensure brain root + list subfiles for the doc tree.
+  await ensureBrainRoot(org.slug);
+  const allDocs = await listDocs({ orgSlug: org.slug });
+  const subfiles = allDocs.filter((d) => d.kind === 'subfile');
+
+  const agentOptions = registeredAgents.map((a) => ({
+    id: a.id, name: a.name, from: a.from, status: a.status,
+  }));
+
   return (
     <div className="brain-doc-root">
       <div className="top">
@@ -73,11 +102,43 @@ export default async function OrgBrainPage({
         <h1>{org.name}</h1>
         {org.tagline && <p className="sub">{org.tagline}</p>}
 
+        <h2>Command center</h2>
+        <p style={{ color: 'var(--muted)', fontSize: 14 }}>
+          Type <code>@agent</code> to mention, <code>/skill</code> to invoke. Skills create
+          subfiles — the main doc stays clean. Providers installed:{' '}
+          <b style={{ color: 'var(--ink-soft)' }}>{installedProviders.join(' · ')}</b>.
+        </p>
+        <CommandBar orgSlug={org.slug} agents={agentOptions} />
+
+        {subfiles.length > 0 && (
+          <>
+            <h2>Doc tree</h2>
+            <div className="doc-tree">
+              {subfiles.map((d) => (
+                <Link key={d.id} className="doc-tree-row" href={`/${org.slug}/docs/${d.id}`}>
+                  <span className="doc-tree-glyph">{d.skillRun?.command || '·'}</span>
+                  <div className="doc-tree-body">
+                    <div className="doc-tree-title">{d.title}</div>
+                    <div className="doc-tree-meta">
+                      {d.skillRun?.skillId.split('.')[0]}
+                      {d.skillRun?.mentionedAgents.length ? ' · ' + d.skillRun.mentionedAgents.map((a) => '@' + a.name).join(' ') : ''}
+                      {' · '}{relativeTs(d.createdAt)}
+                      {d.skillRun?.status === 'running' && ' · running'}
+                      {d.skillRun?.status === 'done' && ' · done'}
+                      {d.skillRun?.status === 'error' && ' · error'}
+                    </div>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          </>
+        )}
+
         <h2>Mission</h2>
         {missionParagraph ? (
           <p>{missionParagraph}</p>
         ) : (
-          <p className="ph">No mission yet — open the brain in /workstation to edit.</p>
+          <p className="ph">No mission yet - open the brain in /{org.slug}/workstation to edit.</p>
         )}
 
         {org.people.length > 0 && (
@@ -158,7 +219,7 @@ export default async function OrgBrainPage({
         <span className="grow" />
         <Link href={`/${org.slug}/agents`}>Agents ({registeredAgents.length})</Link>
         <Link href={`/${org.slug}/install`}>+ Add agent</Link>
-        <Link href="/workstation">Open workstation →</Link>
+        <Link href={`/${org.slug}/workstation`}>Open workstation {'->'}</Link>
       </div>
     </div>
   );

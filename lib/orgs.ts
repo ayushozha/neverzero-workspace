@@ -19,6 +19,9 @@ export interface OrgMemory {
 export type OrgAgentId =
   | 'iris' | 'forge' | 'atlas-agent' | 'loop' | 'beam';
 
+export type OrgProviderId =
+  | 'gbrain' | 'gstack' | 'zeroentropy' | 'the-hog' | 'lightsprint' | 'neverzero';
+
 export interface Org {
   slug: string;                // url-safe, e.g. "atlas"
   name: string;                // display name, e.g. "Atlas"
@@ -31,6 +34,7 @@ export interface Org {
   hq: string;
   people: OrgPerson[];
   agentRoster: OrgAgentId[];   // which named agents are on payroll
+  providers: OrgProviderId[];  // installed skill providers
   memories: OrgMemory[];
   createdAt: string;           // ISO
 }
@@ -84,7 +88,15 @@ export interface CreateOrgInput {
   hq?: string;
   people?: OrgPerson[];
   agentRoster?: OrgAgentId[];
+  providers?: OrgProviderId[];
   memories?: OrgMemory[];
+}
+
+/** Add/remove installed providers on an existing org. Returns the new list. */
+export async function setOrgProviders(slug: string, providers: OrgProviderId[]): Promise<OrgProviderId[] | undefined> {
+  const dedup = Array.from(new Set(providers));
+  const updated = await updateOrg(slug, { providers: dedup });
+  return updated?.providers;
 }
 
 export async function createOrg(input: CreateOrgInput): Promise<Org> {
@@ -112,6 +124,9 @@ export async function createOrg(input: CreateOrgInput): Promise<Org> {
     hq: (input.hq ?? '').trim(),
     people: (input.people ?? []).filter((p) => p.name.trim() || p.role.trim()),
     agentRoster: input.agentRoster ?? ['iris', 'atlas-agent'],
+    // Default: install gbrain + gstack (the headline sponsors) so every new
+    // org has working /plan + /scaffold + /research out of the box.
+    providers: input.providers ?? ['gbrain', 'gstack', 'zeroentropy', 'the-hog'],
     memories: (input.memories ?? []).filter((m) => m.text.trim()),
     createdAt: new Date().toISOString(),
   };
