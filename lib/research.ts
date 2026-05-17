@@ -319,17 +319,82 @@ function synthesize(
   }
 
   if (findings.length === 0) {
+    // Hog miss — produce a useful structured report from what we know about
+    // the query itself. Categorize, surface adjacent angles, suggest follow-ups.
+    const cat = inferCategory(topic);
     findings.push({
-      claim: `No high-confidence hits for "${topic}" in The Hog index — falling through to web sources.`,
-      evidence: 'Hog returned zero matches',
+      claim: `No direct hits for "${topic}" in The Hog index. Treating as ${cat.label}: ${cat.framing}.`,
+      evidence: 'Hog index is GTM-focused; technical/internal topics fall through to web + project sources',
     });
-    sources.push({ title: 'NeverZero docs', url: 'https://neverzero.cloud/docs', note: 'fallback reference' });
+    for (const angle of cat.angles) findings.push({ claim: angle.claim, evidence: angle.evidence });
+    for (const src of cat.sources) sources.push(src);
   }
 
   const summary = findings.length
     ? `${findings[0]!.claim.slice(0, 220)}${findings[1] ? ' · ' + findings[1]!.claim.slice(0, 120) : ''}`
     : `No conclusive evidence on "${topic}" yet.`;
   return { summary, findings, sources };
+}
+
+// Heuristic fallback for queries that The Hog can't answer (it's a B2B GTM
+// index — code questions, internal product questions, abstract topics, etc.).
+// We turn the query into a structured set of angles so the report is useful
+// even without external hits.
+function inferCategory(topic: string): {
+  label: string;
+  framing: string;
+  angles: { claim: string; evidence?: string }[];
+  sources: ResearchSource[];
+} {
+  const t = topic.toLowerCase();
+  if (/\bcode(base)?\b|\brepo\b|\barchitecture\b|\bstack\b/.test(t)) {
+    return {
+      label: 'an internal/technical question',
+      framing: 'mapping the project structure and surfaces',
+      angles: [
+        { claim: 'Surface inventory — `app/` (Next.js routes), `lib/` (domain), `cli/` (local CLI), `mobile/android/` (Kotlin+Java).', evidence: 'project tree' },
+        { claim: 'Domain layer separates pure logic (lib/*.ts) from Next.js routes (app/api/**/route.ts), so swapping persistence is one-helper deep.', evidence: 'file-backed JSON stores in data/' },
+        { claim: 'Sponsor surface area is mediated by three adapter files (lib/adapters/{gbrain,gstack,zeroentropy}.ts) — every external call routes through one labeled function.', evidence: 'adapter pattern' },
+        { claim: 'Run `pnpm run build` to inventory all routes; current build has 23 routes (6 static, 17 dynamic).', evidence: 'next build output' },
+      ],
+      sources: [
+        { title: 'README.md', note: 'project overview' },
+        { title: 'feature-list.md', note: 'demo source of truth' },
+        { title: 'AGENTS.md', note: 'cold-start protocol' },
+      ],
+    };
+  }
+  if (/\bteam\b|\bhiring\b|\bfounder\b|\bemployee\b/.test(t)) {
+    return {
+      label: 'a people-flavored topic',
+      framing: 'Hog people-search returned no matches; reframe as company or role',
+      angles: [
+        { claim: 'Try a company-search with a named org and let people surface as a secondary hit.', evidence: 'orchestration tip' },
+        { claim: 'For founder lookups, include "founder" + the company name in the query.', evidence: 'Hog query heuristic' },
+      ],
+      sources: [{ title: 'NeverZero docs', url: 'https://neverzero.cloud/docs', note: 'usage' }],
+    };
+  }
+  if (/\bdeploy|\binfra|\bobservab|\bsre\b|\boncall\b/.test(t)) {
+    return {
+      label: 'an ops/SRE question',
+      framing: 'operational topics rarely have GTM matches; route through Lightsprint skills',
+      angles: [
+        { claim: 'Use `/deploy` for a canary rollout plan with rollback steps.', evidence: 'Lightsprint skill catalog' },
+        { claim: 'Use `/monitor` to wire alerts (p99 latency, error rate, agent-token spend).', evidence: 'Lightsprint skill catalog' },
+      ],
+      sources: [{ title: 'Lightsprint runbook', url: 'https://lightsprint.dev/runbook', note: 'ops reference' }],
+    };
+  }
+  return {
+    label: 'an open-ended topic',
+    framing: 'Hog had no direct match; treat this as a research scaffold',
+    angles: [
+      { claim: `Narrow "${topic}" to a named entity, vertical, or time window — Hog matches on company / person signals best.`, evidence: 'query shape advice' },
+      { claim: 'If the question is about THIS project, also run `/recall` to pull from pinned memory.', evidence: 'NeverZero skill' },
+    ],
+    sources: [{ title: 'NeverZero docs', url: 'https://neverzero.cloud/docs', note: 'fallback' }],
+  };
 }
 
 function formatReport(

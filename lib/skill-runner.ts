@@ -152,48 +152,130 @@ async function runResearchSkill(docId: string, task: string, orgSlug: string): P
   if (!existing) return;
 
   // Kick off the existing research orchestrator. It writes to its own store +
-  // broadcasts research.* events; we just slot its summary back into the doc.
+  // broadcasts research.* events; we just slot its progress back into the doc.
   const rec = await startResearch({ topic: task, orgSlug, requestedBy: existing.createdBy });
 
-  // Poll the research record (orchestrator is fire-and-forget). Cap at 30s.
-  const deadline = Date.now() + 30_000;
-  let finalSummary = '';
-  let finalReport = '';
-  let researchId = rec.id;
+  const research = await import('./research');
+  const headerContent = existing.content;
+  const deadline = Date.now() + 120_000; // 2-minute safety net; orchestrator usually finishes in <5s
+  let lastWrittenBody = '';
+
+  // Stream the subfile body on every poll iteration so it visibly fills in.
   while (Date.now() < deadline) {
-    await sleep(500);
-    const r = await import('./research').then((m) => m.getResearch(rec.id));
+    const r = await research.getResearch(rec.id);
     if (!r) break;
-    if (r.status === 'done') {
-      finalSummary = r.summary;
-      finalReport = r.report;
-      researchId = r.id;
-      break;
+
+    const body = renderResearchSubfileBody(headerContent, r, orgSlug);
+    if (body !== lastWrittenBody) {
+      await updateDoc(docId, { content: body });
+      lastWrittenBody = body;
     }
-    if (r.status === 'error') {
-      finalSummary = `Research errored: ${r.error || 'unknown'}`;
-      break;
-    }
+
+    if (r.status === 'done' || r.status === 'error') break;
+    await sleep(500);
   }
 
-  const body = [
-    existing.content.replace('_Running…_', '_Done — see linked research record._'),
-    '',
-    '---',
-    '',
-    `### TL;DR`,
-    '',
-    finalSummary || '_(no summary)_',
-    '',
-    `→ Full report: [/${orgSlug}/research/${researchId}](/${orgSlug}/research/${researchId})`,
-    '',
-    finalReport ? '<details><summary>Inline report</summary>\n\n' + finalReport + '\n\n</details>' : '',
-  ].join('\n');
+  // Final mark — the subfile body is whatever the last write rendered.
+  const final = await research.getResearch(rec.id);
+  const finalStatus: 'done' | 'error' = final?.status === 'error' ? 'error' : 'done';
+  const updated = await import('./docs').then((m) => m.getDoc(docId));
+  if (updated) {
+    await updateDoc(docId, {
+      skillRun: { ...updated.skillRun!, status: finalStatus, completedAt: new Date().toISOString() },
+    });
+  }
+}
 
-  await updateDoc(docId, {
-    content: body,
-    skillRun: { ...existing.skillRun!, status: 'done', completedAt: new Date().toISOString() },
-  });
+// Render the research subfile body from the current research record. Called on
+// every poll iteration so the subfile fills in progressively — header stays
+// stable, the body below the `---` rule reflects whatever the orchestrator
+// has produced so far (active step, partial findings, partial sources, etc).
+function renderResearchSubfileBody(
+  header: string,
+  r: {
+    id: string; topic: string; status: string; error: string | null;
+    summary: string; report: string;
+    steps: { id: string; label: string; status: string; detail?: string }[];
+    findings: { claim: string; evidence?: string }[];
+    sources: { title: string; url?: string; note?: string }[];
+    hogHits: { companies: unknown[]; people: unknown[] };
+  },
+  orgSlug: string,
+): string {
+  const runningStep = r.steps.find((s) => s.status === 'running');
+  const doneSteps = r.steps.filter((s) => s.status === 'done');
+  const stepGlyph = (s: { status: string }) =>
+    s.status === 'done' ? '✓' : s.status === 'running' ? '◐' : s.status === 'error' ? '✗' : '·';
+
+  const statusLine =
+    r.status === 'done' ? `_Done — ${doneSteps.length}/${r.steps.length} steps complete._`
+    : r.status === 'error' ? `_Errored: ${r.error || 'unknown'}_`
+    : runningStep ? `_Running — currently: **${runningStep.label}**_`
+    : `_Planning…_`;
+
+  const lines: string[] = [];
+  lines.push(header.replace('_Running…_', statusLine).replace('_Done — see linked research record._', statusLine).trimEnd());
+  lines.push('');
+  lines.push('---');
+  lines.push('');
+
+  // Progress block — always present, fills in as steps complete.
+  lines.push('### Progress');
+  lines.push('');
+  for (const s of r.steps) {
+    const detail = s.detail ? ` — ${s.detail}` : '';
+    lines.push(`- ${stepGlyph(s)} **${s.label}**${detail}`);
+  }
+  lines.push('');
+
+  // TL;DR — populated as soon as synth step finishes.
+  lines.push('### TL;DR');
+  lines.push('');
+  lines.push(r.summary && r.summary.trim() ? r.summary : '_synthesizing…_');
+  lines.push('');
+
+  // Findings — accumulate as synth runs.
+  if (r.findings.length > 0) {
+    lines.push('### Key findings');
+    lines.push('');
+    for (const f of r.findings) {
+      lines.push(`- ${f.claim}${f.evidence ? ` _(${f.evidence})_` : ''}`);
+    }
+    lines.push('');
+  }
+
+  // Sources — accumulate too.
+  if (r.sources.length > 0) {
+    lines.push('### Sources');
+    lines.push('');
+    for (const s of r.sources) {
+      lines.push(`- ${s.url ? `[${s.title}](${s.url})` : s.title}${s.note ? ` — _${s.note}_` : ''}`);
+    }
+    lines.push('');
+  }
+
+  // Hog hits — show counts even when zero so the user knows it ran.
+  const cN = r.hogHits.companies.length;
+  const pN = r.hogHits.people.length;
+  if (cN > 0 || pN > 0 || doneSteps.find((s) => s.id === 'hog')) {
+    lines.push('### The Hog signal');
+    lines.push('');
+    lines.push(`- ${cN} company hit${cN === 1 ? '' : 's'} · ${pN} people hit${pN === 1 ? '' : 's'}`);
+    lines.push('');
+  }
+
+  lines.push(`→ Full report: [/${orgSlug}/research/${r.id}](/${orgSlug}/research/${r.id})`);
+  lines.push('');
+
+  if (r.report) {
+    lines.push('<details><summary>Inline report</summary>');
+    lines.push('');
+    lines.push(r.report);
+    lines.push('');
+    lines.push('</details>');
+  }
+
+  return lines.join('\n');
 }
 
 async function runHeuristicSkill(
